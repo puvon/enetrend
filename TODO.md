@@ -49,6 +49,20 @@ lint はエラー0件・警告16件。内訳は Activity の重複 label 1件、
 
 ## Phase 1: Health Connect 接続基盤
 
+実装状況（2026-09-13）: 1.1〜1.3 のコードとテストを追加済み。接続端末がないため、端末操作を含む各項目の完了確認は未了としてチェックを残す。
+
+* `connect-client:1.1.0` を追加し、`AndroidHealthConnection` で利用可否・クライアント生成を UI から分離した。
+* 栄養・総消費カロリー・体重の読み取り権限のみを宣言・要求する。Android 13 以下の rationale Activity と Android 14 以降の permission usage alias を定義し、用途説明・プライバシー画面を追加した。
+* 起動・画面復帰・権限要求前・結果受信後に権限を再確認し、未許可・一部許可・取り消し・確認失敗を接続済みと区別する。インストール／更新、再要求、設定、再確認の導線を追加した。
+* 健康データの取得は Phase 2 で実装する。取得直前の権限再確認と取得中の権限喪失への対応も、その取得処理に組み込むこと。
+* JVM テストで利用不可・更新必要時に権限照会しないこと、拒否・部分許可、取り消し・再付与、例外からの復帰、キャンセル伝播を検証する。Android テストには権限定義の一致、権限要求・設定・更新ボタンの導線確認を追加した。
+
+端末確認: Android 13 以下／14 以降で、利用可否、未導入・更新案内、権限許可・拒否・一部許可・取り消し後の復帰、両方のプライバシー導線、画面回転・バックグラウンド復帰を確認する。`adb devices` に接続端末がなく、Android テストは APK 作成までで実行未了。
+
+自動検証: `test lint assembleDebug :app:assembleDebugAndroidTest --continue --console=plain` が成功。JVM テストは既存1件＋追加5件が成功した。pre-commit の `gitleaks-system` と、新規ファイルを含む `app/src`・`TODO.md` の gitleaks 走査も通過した。Phase 0.3 と同じく実行プロセス内の PATH で既存 gitleaks を解決した。
+
+参照した公式仕様: [導入・権限・プライバシー導線](https://developer.android.com/health-and-fitness/health-connect/get-started)、[リリース情報](https://developer.android.com/jetpack/androidx/releases/health-connect)。公開時には Play Console の権限申告・プライバシーポリシーと一致させる。
+
 - [ ] 1.1 公式 Health Connect 依存と最小限の接続構成を導入する。
   既存の version catalog と app 構成を使用する。採用時の公式 API と SDK 互換性を確認し、利用可否判定・クライアント生成を UI から分離する。対応環境、未導入・更新が必要な環境、利用不可を扱い、端末で確認する。
 - [ ] 1.2 3種類のデータの読み取り権限と権限要求導線を実装する。
