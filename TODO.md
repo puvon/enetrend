@@ -49,7 +49,7 @@ lint はエラー0件・警告16件。内訳は Activity の重複 label 1件、
 
 ## Phase 1: Health Connect 接続基盤
 
-実装状況（2026-09-13）: 1.1〜1.3 のコードとテストを追加済み。接続端末がないため、端末操作を含む各項目の完了確認は未了としてチェックを残す。
+実装状況（2026-09-14 更新）: 1.1〜1.3 のコードとテストを追加済み。API 33・34 の Android 自動テストは成功。システム権限画面での操作を含む各項目の完了確認は未了としてチェックを残す。
 
 * `connect-client:1.1.0` を追加し、`AndroidHealthConnection` で利用可否・クライアント生成を UI から分離した。
 * 栄養・総消費カロリー・体重の読み取り権限のみを宣言・要求する。Android 13 以下の rationale Activity と Android 14 以降の permission usage alias を定義し、用途説明・プライバシー画面を追加した。
@@ -57,7 +57,11 @@ lint はエラー0件・警告16件。内訳は Activity の重複 label 1件、
 * 健康データの取得は Phase 2 で実装する。取得直前の権限再確認と取得中の権限喪失への対応も、その取得処理に組み込むこと。
 * JVM テストで利用不可・更新必要時に権限照会しないこと、拒否・部分許可、取り消し・再付与、例外からの復帰、キャンセル伝播を検証する。Android テストには権限定義の一致、権限要求・設定・更新ボタンの導線確認を追加した。
 
-端末確認: Android 13 以下／14 以降で、利用可否、未導入・更新案内、権限許可・拒否・一部許可・取り消し後の復帰、両方のプライバシー導線、画面回転・バックグラウンド復帰を確認する。`adb devices` に接続端末がなく、Android テストは APK 作成までで実行未了。
+端末確認: Android 13 以下／14 以降で、利用可否、未導入・更新案内、権限許可・拒否・一部許可・取り消し後の復帰、両方のプライバシー導線、画面回転・バックグラウンド復帰を確認する。
+
+2026-09-14 に `enetrend_api34`（emulator-5554、API 34 / Android 14）で `.\gradlew.bat :app:connectedDebugAndroidTest --console=plain` を実行し、4件成功・失敗0件・スキップ0件。package 確認、部分許可状態の要求・設定ボタン、更新必要状態の案内・ボタン、Manifest と要求権限が3種類の読み取りのみで一致することを確認した。画面テストは状態とコールバックを渡して検証するもので、Health Connect のシステム権限画面での許可・拒否・取り消し操作を検証したものではない。上記の実操作確認は引き続き未実施。
+
+2026-09-14 に `enetrend_api33`（emulator-5554、API 33 / Android 13）でも同じ Android テストコマンドを実行し、4件成功・失敗0件・スキップ0件。検証対象は API 34 と同じ。Health Connect のシステム画面での許可・拒否・取り消しは今回も検証対象外。
 
 自動検証: `test lint assembleDebug :app:assembleDebugAndroidTest --continue --console=plain` が成功。JVM テストは既存1件＋追加5件が成功した。pre-commit の `gitleaks-system` と、新規ファイルを含む `app/src`・`TODO.md` の gitleaks 走査も通過した。Phase 0.3 と同じく実行プロセス内の PATH で既存 gitleaks を解決した。
 
