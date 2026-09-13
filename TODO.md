@@ -34,8 +34,18 @@ Git 運用と作業範囲は [AGENTS.md](AGENTS.md) に従う。原則として�
   新規プロジェクト作成や Compose 導入を重複して行わない。
 - [x] Wrapper の `tasks --all --console=plain` を実行し、検証タスクの存在を確認する。
   一覧取得は成功。製品コードの test / lint / build 成功を意味するものではない。
-- [ ] 0.3 開発環境と基準となる検証結果を確認する。
+- [x] 0.3 開発環境と基準となる検証結果を確認する。
   Wrapper のタスク一覧で検証タスクを確認し、test / lint / debug build を実行する。失敗時は既存問題と環境問題を区別して報告し、SDK や依存バージョンを根拠なく変更しない。pre-commit とシステムの gitleaks の利用可否・hook 動作も確認する。
+
+### 0.3 の検証結果（2026-09-13）
+
+`feathre/base2` 上で `.\gradlew.bat test lint assembleDebug --continue --console=plain` が成功。既存 JVM テスト1件は失敗・エラー・スキップなし。debug APK の組み立ては UP-TO-DATE を含め成功した。Android test / instrumentation test は今回未実施。
+
+lint はエラー0件・警告16件。内訳は Activity の重複 label 1件、依存バージョンの更新通知8件、未使用の色リソース7件。既存コード・設定に対する警告として記録し、この基盤確認では変更・抑制していない。詳細は生成レポート `app/build/reports/lint-results-debug.html` を参照する。
+
+既存 `.git/hooks/pre-commit` は pipx の pre-commit 専用 Python を参照している。pre-commit と gitleaks はこの実行環境の PATH では見つからなかったが、インストール済みだった。hook の Python から `-m pre_commit run --all-files` を実行した初回は `Executable gitleaks not found` で失敗。WinGet 配下の既存 gitleaks 8.30.1 のディレクトリを実行プロセスの PATH に追加して再実行し、設定済み `gitleaks-system` が Passed となった。設定の参照 rev は v8.30.0、実際のシステム実行版は 8.30.1。hook や検出の迂回、永続 PATH の変更、新規インストールは行っていない。
+
+同じ実行環境で再検証する場合は、既存 hook の Python とインストール済み gitleaks を解決できる環境を使用する。commit 自体は実行していないため、commit 時の自動起動は未検証。設定済み hook を pre-commit から実行した結果を基準とする。
 
 ## Phase 1: Health Connect 接続基盤
 
@@ -126,7 +136,7 @@ Phase 0 で実在する Gradle タスクと実行環境を確認し、各フェ�
 .\gradlew.bat assembleDebug
 ```
 
-限定的な JVM テストには確認済みの `:app:testDebugUnitTest`、接続した Android 端末での検証には `:app:connectedDebugAndroidTest` を使用できる。今回実行したのはタスク一覧取得のみで、これらの検証本体は未実施。
+限定的な JVM テストには確認済みの `:app:testDebugUnitTest`、接続した Android 端末での検証には `:app:connectedDebugAndroidTest` を使用できる。0.3 で test / lint / assembleDebug を実行済み。Android 端末での検証は未実施。
 
 pre-commit は既存の `pre-commit run --all-files` を使用し、設定済み `gitleaks-system` が成功することを確認する。`pass_filenames: false` のため、指定ファイルだけの走査とはみなさない。新規ファイルが実際の検査対象に含まれることも確認する。システムの gitleaks と pre-commit が必要であり、設定ファイルの存在だけで成功扱いにしない。
 
