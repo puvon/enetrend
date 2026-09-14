@@ -29,8 +29,8 @@ class AndroidHealthDataSource(context: Context) : HealthDataSource {
         // Activity priorities/deduplication belong to Health Connect. Nutrition from different
         // sources is combined by the API; identical meals across sources are not inferred here.
         return CalorieTotals(
-            intakeKilocalories = result[NutritionRecord.ENERGY_TOTAL]?.inKilocalories,
-            burnedKilocalories = result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories,
+            intakeKilocalories = HealthUnits.kilocalories(result[NutritionRecord.ENERGY_TOTAL]),
+            burnedKilocalories = HealthUnits.kilocalories(result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]),
             dataOrigins = result.dataOrigins.map { it.packageName }.toSet(),
         )
     }
@@ -51,7 +51,7 @@ class AndroidHealthDataSource(context: Context) : HealthDataSource {
                     id = record.metadata.id,
                     time = record.time,
                     zoneOffset = record.zoneOffset,
-                    kilograms = record.weight.inKilograms,
+                    kilograms = HealthUnits.kilograms(record.weight),
                     dataOrigin = record.metadata.dataOrigin.packageName,
                     lastModifiedTime = record.metadata.lastModifiedTime,
                 )

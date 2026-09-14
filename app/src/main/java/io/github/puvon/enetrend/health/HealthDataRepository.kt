@@ -6,6 +6,30 @@ import kotlinx.coroutines.ensureActive
 
 /** Foreground reads only. A failed page never produces a seemingly complete partial result. */
 class HealthDataRepository(private val source: HealthDataSource) {
+    suspend fun readDailyCalories(range: HealthDataRange): DailyCaloriesResult {
+        return try {
+            checkAccess()?.let { return it }
+            val daily = linkedMapOf<java.time.LocalDate, CalorieTotals>()
+            for (day in range.days()) {
+                currentCoroutineContext().ensureActive()
+                if (day.isEmpty) continue
+                checkAccess()?.let { return it }
+                daily[day.date] = source.readCalorieTotals(
+                    HealthDataRange(day.date, day.date.plusDays(1), range.zoneId),
+                )
+            }
+            checkAccess()?.let { return it }
+            DailyCaloriesResult.Available(DailyCalorieData(range, daily))
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: SecurityException) {
+            HealthDataResult.AccessDenied
+        } catch (_: Exception) {
+            // A failed day is not missing data and must not be interpolated.
+            HealthDataResult.Error
+        }
+    }
+
     suspend fun read(range: HealthDataRange): HealthDataResult {
         return try {
             checkAccess()?.let { return it }
@@ -46,7 +70,7 @@ class HealthDataRepository(private val source: HealthDataSource) {
         }
     }
 
-    private suspend fun checkAccess(): HealthDataResult? {
+    private suspend fun checkAccess(): HealthReadFailure? {
         currentCoroutineContext().ensureActive()
         return when (source.availability()) {
             HealthAvailability.UNAVAILABLE -> HealthDataResult.Unavailable
