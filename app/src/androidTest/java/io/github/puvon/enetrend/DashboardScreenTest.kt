@@ -6,17 +6,80 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.toPixelMap
 import io.github.puvon.enetrend.health.*
 import io.github.puvon.enetrend.ui.DashboardScreen
 import io.github.puvon.enetrend.ui.theme.EnetrendTheme
 import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
 class DashboardScreenTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun singlePlotDrawsAllLinesAndPrecedesPeriodControls() {
+        val start = LocalDate.of(2026, 9, 1)
+        val range = HealthDataRange(start, start.plusDays(7), ZoneId.of("Asia/Tokyo"))
+        val calories = DailyCalorieData(range, (0L..6L).associate {
+            start.plusDays(it) to CalorieTotals(if (it % 2 == 0L) 1700.0 else 2200.0, 2000.0)
+        })
+        val records = (0L..6L).map {
+            WeightMeasurement("$it", start.plusDays(it).atTime(8, 0).atZone(range.zoneId).toInstant(), null,
+                70.0 + (it % 3) * 0.15, "test", java.time.Instant.EPOCH)
+        }
+        val data = DashboardData(CalorieBalanceCalculator.calculate(calories), WeightTrendCalculator.calculate(records, range), false)
+        var lineColors = emptyList<Color>()
+        compose.setContent { EnetrendTheme {
+            lineColors = listOf(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.secondary,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f).compositeOver(MaterialTheme.colorScheme.background))
+            DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
+        } }
+        val plot = compose.onNodeWithContentDescription("統合グラフ。", substring = true)
+        compose.onAllNodesWithContentDescription("統合グラフ。", substring = true).assertCountEquals(1)
+        plot.performScrollTo().assertIsDisplayed()
+        val pixels = plot.captureToImage().toPixelMap()
+        lineColors.forEach { color ->
+            var count = 0
+            for (y in 0 until pixels.height) for (x in 0 until pixels.width) {
+                val p = pixels[x, y]
+                if (kotlin.math.abs(p.red - color.red) < 0.02 && kotlin.math.abs(p.green - color.green) < 0.02 && kotlin.math.abs(p.blue - color.blue) < 0.02) count++
+            }
+            assertTrue("Bars and each line must be painted inside the same plot", count > 20)
+        }
+        val plotTop = plot.fetchSemanticsNode().positionInRoot.y
+        val controlsTop = compose.onNodeWithText("表示期間（今日まで）").fetchSemanticsNode().positionInRoot.y
+        assertTrue(plotTop < controlsTop)
+        compose.onNodeWithText("体重 kg").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun cumulativeLineDoesNotContinueAfterMissingDay() {
+        val start = LocalDate.of(2026, 9, 1)
+        val range = HealthDataRange(start, start.plusDays(3), ZoneId.of("Asia/Tokyo"))
+        val calories = DailyCalorieData(range, mapOf(start to CalorieTotals(100.0, 200.0),
+            start.plusDays(2) to CalorieTotals(300.0, 200.0)))
+        val data = DashboardData(CalorieBalanceCalculator.calculate(calories), WeightTrendCalculator.calculate(emptyList(), range), false)
+        var cumulativeColor = Color.Transparent
+        compose.setContent { EnetrendTheme {
+            cumulativeColor = MaterialTheme.colorScheme.tertiary
+            DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
+        } }
+        val plot = compose.onNodeWithContentDescription("統合グラフ。", substring = true)
+        plot.performScrollTo()
+        val pixels = plot.captureToImage().toPixelMap()
+        var coloredPixels = 0
+        for (y in 0 until pixels.height) for (x in pixels.width / 2 until pixels.width) {
+            val p = pixels[x, y]
+            if (kotlin.math.abs(p.red - cumulativeColor.red) < 0.02 && kotlin.math.abs(p.green - cumulativeColor.green) < 0.02 && kotlin.math.abs(p.blue - cumulativeColor.blue) < 0.02) coloredPixels++
+        }
+        assertEquals("Missing cumulative values must not be replaced by the subtotal", 0, coloredPixels)
+        compose.onNodeWithText("期間累積収支：未算出").performScrollTo().assertIsDisplayed()
+    }
 
     @Test fun changingDisplayPeriodUpdatesOriginAndDisplayedTotal() {
         val end = LocalDate.of(2026, 9, 15)
@@ -72,11 +135,11 @@ class DashboardScreenTest {
         compose.setContent { EnetrendTheme {
             DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
         } }
-        compose.onNodeWithText("日別カロリー収支").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("期間累積収支").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("■ 日別カロリー収支").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("━ 期間累積収支").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("期間累積収支：未算出").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("体重・移動平均").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間累積は独立スケール（体重との連動なし）").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("日別収支：-200.0 kcal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("算出可能日の小計：", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("体重：欠測").performScrollTo().assertIsDisplayed()

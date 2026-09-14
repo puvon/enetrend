@@ -1,6 +1,5 @@
 package io.github.puvon.enetrend.ui
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -8,18 +7,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.puvon.enetrend.health.*
 import java.time.LocalDate
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -78,20 +71,6 @@ fun DashboardScreen(
                 TextButton(onClick = onRetry) { Text("再確認") }
                 TextButton(onClick = onSettings) { Text("Health Connect の設定") }
             }
-            Text("表示期間（今日まで）")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(7, 14, 30).forEach { days ->
-                    FilterChip(selected = days == displayDays, onClick = { onDisplayDays(days) },
-                        label = { Text("${days}日間") })
-                }
-            }
-            Text("移動平均の計算期間")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                MovingAveragePeriod.entries.forEach { period ->
-                    FilterChip(selected = period == averagePeriod, onClick = { onAveragePeriod(period) },
-                        label = { Text("${period.days}日平均") })
-                }
-            }
             if (actionError) Text("画面を開けませんでした。端末の設定から確認してください。")
             when (state) {
                 DashboardState.Loading -> {
@@ -105,15 +84,16 @@ fun DashboardScreen(
                     HealthDataResult.AccessDenied -> "データへのアクセスが制限されています。権限と読み取り可能な期間を確認してください。"
                     HealthDataResult.Error -> "データを取得できませんでした。再確認でやり直してください。"
                 })
-                is DashboardState.Ready -> DashboardContent(state.data)
+                is DashboardState.Ready -> DashboardContent(state.data) { PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod) }
             }
+            if (state !is DashboardState.Ready) PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
             TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
         }
     }
 }
 
 @Composable
-private fun DashboardContent(data: DashboardData) {
+private fun DashboardContent(data: DashboardData, controls: @Composable () -> Unit) {
     val days = data.balances.daily
     val range = data.balances.range
     Text("${range.startDate} ～ ${range.endDateExclusive.minusDays(1)}")
@@ -121,32 +101,19 @@ private fun DashboardContent(data: DashboardData) {
     if (data.historyLimited) Text("表示期間前のデータへのアクセスが制限されています。開始付近の平均・補間は利用できる記録だけに基づきます。")
     if (!data.hasData) {
         Text("この期間に表示できるデータがありません。")
+        controls()
         return
     }
-    Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelMedium)
+
     var selected by rememberSaveable(range.startDate.toString(), range.endDateExclusive.toString()) {
         mutableStateOf(days.lastIndex)
     }
-    val primary = MaterialTheme.colorScheme.primary
-    val secondary = MaterialTheme.colorScheme.tertiary
-    TrendChart("日別カロリー収支", "kcal", listOf(PlotSeries(days.map { it.kilocalories },
-        days.map { it.isEstimated }, primary)), selected, bars = true, includeZero = true)
-    TrendChart("期間累積収支", "kcal", listOf(PlotSeries(data.balances.periodCumulative.map { it.kilocalories },
-        data.balances.periodCumulative.map { it.isEstimated }, primary)), selected, includeZero = true,
-        initialValue = data.balances.periodStartKilocalories, initialLabel = "期間開始（${range.startDate}）")
+    val chart = remember(data) { DashboardChartProjector.project(data) }
+    DashboardChart(chart, selected)
+    controls()
     Text("表示期間の開始を0 kcalとして計算します。期間を変えると、同じ日の期間累積収支も変わります。")
     if (data.balances.periodCumulative.any { !it.isComplete }) Text("欠測日以降の期間累積収支は未算出です。詳細の小計は算出できた日のみです。")
-    TrendChart("体重・移動平均", "kg", listOf(
-        PlotSeries(data.weights.map { it.display.number() }, data.weights.map { it.display is DisplayValue.Interpolated }, primary),
-        PlotSeries(data.weights.map { it.movingAverage.kilograms },
-            data.weights.map { it.movingAverage.hasInsufficientDays }, secondary, dotted = true),
-    ), selected)
-    Text("体重：実線・点／移動平均：点線。平均の白抜き点は実測日数不足。")
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(range.startDate.format(DateTimeFormatter.ofPattern("M/d")))
-        Text(range.endDateExclusive.minusDays(1).format(DateTimeFormatter.ofPattern("M/d")))
-    }
-    Text("日付を選んで詳細を確認（3つのグラフで共通）")
+    Text("日付を選んで詳細を確認")
     Slider(value = selected.toFloat(), onValueChange = { selected = it.roundToInt() },
         valueRange = 0f..days.lastIndex.toFloat(), steps = (days.size - 2).coerceAtLeast(0),
         modifier = Modifier.semantics { contentDescription = "詳細を表示する日付" })
@@ -165,72 +132,27 @@ private fun DashboardContent(data: DashboardData) {
     Text("今日の記録は途中です。記録がある日も記録漏れがないとは限りません。欠測は線でつなぎません。移動平均は取得できた実測値のみを使用します。")
 }
 
-private data class PlotSeries(val values: List<Double?>, val estimated: List<Boolean>, val color: Color, val dotted: Boolean = false)
-
-@Composable
-private fun TrendChart(title: String, unit: String, series: List<PlotSeries>, selected: Int,
-    bars: Boolean = false, includeZero: Boolean = false, initialValue: Double? = null, initialLabel: String = "") {
-    Text(title, style = MaterialTheme.typography.titleMedium)
-    if (initialValue != null) Text("$initialLabel：${initialValue.formatted(unit)}", style = MaterialTheme.typography.labelMedium)
-    val values = series.flatMap { it.values }.filterNotNull()
-    val rawMin = values.minOrNull() ?: 0.0
-    val rawMax = values.maxOrNull() ?: 1.0
-    val min = if (includeZero) minOf(0.0, rawMin) else rawMin - 0.5
-    val max = maxOf(if (includeZero) maxOf(0.0, rawMax) else rawMax + 0.5, min + 1.0)
-    Text(if (values.isEmpty()) "データなし／未算出" else "${min.formatted(unit)} ～ ${max.formatted(unit)}",
-        style = MaterialTheme.typography.labelMedium)
-    val grid = MaterialTheme.colorScheme.outlineVariant
-    Canvas(Modifier.fillMaxWidth().height(110.dp).semantics {
-        contentDescription = "$title。横軸は共通の日付。数値は日付選択の下に表示。"
-    }) {
-        val n = series.first().values.size
-        fun x(index: Int) = size.width * (index + 0.5f) / n
-        fun y(value: Double) = (size.height * (1 - (value - min) / (max - min))).toFloat()
-        drawLine(grid, Offset(x(selected), 0f), Offset(x(selected), size.height), 2f)
-        if (includeZero) drawLine(grid, Offset(0f, y(0.0)), Offset(size.width, y(0.0)))
-        series.forEach { line ->
-            if (initialValue != null) {
-                val origin = Offset(0f, y(initialValue))
-                drawCircle(line.color, 3f, origin)
-                // Keep all daily x positions shared with the other graphs. The extra point is
-                // the range boundary; never bridge it over a missing first day's balance.
-                line.values.firstOrNull()?.let { first ->
-                    drawLine(line.color, origin, Offset(x(0), y(first)), 2f,
-                        pathEffect = if (line.estimated.first()) PathEffect.dashPathEffect(floatArrayOf(6f, 6f)) else null)
-                }
-            }
-            line.values.forEachIndexed { index, value ->
-                if (value != null) {
-                    val point = Offset(x(index), y(value))
-                    if (bars) {
-                        val width = size.width / n * 0.65f
-                        val top = minOf(y(0.0), point.y)
-                        val height = kotlin.math.abs(y(0.0) - point.y).coerceAtLeast(1f)
-                        if (line.estimated[index]) drawRect(line.color, Offset(point.x - width / 2, top), Size(width, height), style = Stroke(2f))
-                        else drawRect(line.color, Offset(point.x - width / 2, top), Size(width, height))
-                    } else {
-                        if (index > 0) line.values[index - 1]?.let { previous ->
-                            val dashed = line.dotted || line.estimated[index] || line.estimated[index - 1]
-                            drawLine(line.color, Offset(x(index - 1), y(previous)), point, 2f,
-                                pathEffect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(6f, 6f)) else null)
-                        }
-                        if (line.estimated[index]) drawCircle(line.color, 4f, point, style = Stroke(2f))
-                        else drawCircle(line.color, 3f, point)
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun DisplayValue.number(): Double? = when (this) {
-    is DisplayValue.Recorded -> value
-    is DisplayValue.Interpolated -> value
-    DisplayValue.Missing -> null
-}
 private fun Double?.formatted(unit: String): String = this?.let { String.format(Locale.JAPAN, "%.1f %s", it, unit) } ?: "未算出"
 private fun DisplayValue.label(unit: String): String = when (this) {
     is DisplayValue.Recorded -> value.formatted(unit)
     is DisplayValue.Interpolated -> "${value.formatted(unit)}（補間：$previousRecordedDate ～ $nextRecordedDate）"
     DisplayValue.Missing -> "欠測"
+}
+
+@Composable
+private fun PeriodControls(displayDays: Int, averagePeriod: MovingAveragePeriod, onDisplayDays: (Int) -> Unit, onAveragePeriod: (MovingAveragePeriod) -> Unit) {
+    Text("表示期間（今日まで）")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(7, 14, 30).forEach { days ->
+            FilterChip(selected = days == displayDays, onClick = { onDisplayDays(days) },
+                label = { Text("${days}日間") })
+        }
+    }
+    Text("移動平均の計算期間")
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        MovingAveragePeriod.entries.forEach { period ->
+            FilterChip(selected = period == averagePeriod, onClick = { onAveragePeriod(period) },
+                label = { Text("${period.days}日平均") })
+        }
+    }
 }
