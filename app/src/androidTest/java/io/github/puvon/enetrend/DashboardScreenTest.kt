@@ -2,6 +2,10 @@ package io.github.puvon.enetrend
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import io.github.puvon.enetrend.health.*
 import io.github.puvon.enetrend.ui.DashboardScreen
 import io.github.puvon.enetrend.ui.theme.EnetrendTheme
@@ -13,6 +17,24 @@ import org.junit.Test
 
 class DashboardScreenTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun changingDisplayPeriodUpdatesOriginAndDisplayedTotal() {
+        val end = LocalDate.of(2026, 9, 15)
+        val loaded = HealthDataRange(end.minusDays(30), end, ZoneId.of("Asia/Tokyo"))
+        val calories = DailyCalorieData(loaded, (1L..30L).associate { end.minusDays(it) to CalorieTotals(2000.0, 2100.0) })
+        compose.setContent { EnetrendTheme {
+            var days by remember { mutableStateOf(30) }
+            val selected = HealthDataRange(end.minusDays(days.toLong()), end, loaded.zoneId)
+            val data = DashboardData(CalorieBalanceCalculator.calculate(calories, selected),
+                WeightTrendCalculator.calculate(emptyList(), selected), false)
+            DashboardScreen(DashboardState.Ready(data), days, MovingAveragePeriod.SEVEN_DAYS, { days = it }, {}, {}, {}, {})
+        } }
+        compose.onNodeWithText("期間開始（2026-08-16）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間累積収支：-3000.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("7日間").performScrollTo().performClick()
+        compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間累積収支：-700.0 kcal").performScrollTo().assertIsDisplayed()
+    }
 
     @Test fun independentPeriodControlsAndLoading() {
         var display = 30
@@ -51,7 +73,9 @@ class DashboardScreenTest {
             DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
         } }
         compose.onNodeWithText("日別カロリー収支").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("累積カロリー収支").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間累積収支").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間累積収支：未算出").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("体重・移動平均").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("日別収支：-200.0 kcal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("算出可能日の小計：", substring = true).performScrollTo().assertIsDisplayed()

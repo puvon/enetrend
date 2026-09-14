@@ -131,9 +131,11 @@ private fun DashboardContent(data: DashboardData) {
     val secondary = MaterialTheme.colorScheme.tertiary
     TrendChart("日別カロリー収支", "kcal", listOf(PlotSeries(days.map { it.kilocalories },
         days.map { it.isEstimated }, primary)), selected, bars = true, includeZero = true)
-    TrendChart("累積カロリー収支", "kcal", listOf(PlotSeries(data.balances.cumulative.map { it.kilocalories },
-        data.balances.cumulative.map { it.isEstimated }, primary)), selected, includeZero = true)
-    if (data.balances.cumulative.any { !it.isComplete }) Text("欠測日以降の累積は未算出です。詳細の小計は算出できた日のみです。")
+    TrendChart("期間累積収支", "kcal", listOf(PlotSeries(data.balances.periodCumulative.map { it.kilocalories },
+        data.balances.periodCumulative.map { it.isEstimated }, primary)), selected, includeZero = true,
+        initialValue = data.balances.periodStartKilocalories, initialLabel = "期間開始（${range.startDate}）")
+    Text("表示期間の開始を0 kcalとして計算します。期間を変えると、同じ日の期間累積収支も変わります。")
+    if (data.balances.periodCumulative.any { !it.isComplete }) Text("欠測日以降の期間累積収支は未算出です。詳細の小計は算出できた日のみです。")
     TrendChart("体重・移動平均", "kg", listOf(
         PlotSeries(data.weights.map { it.display.number() }, data.weights.map { it.display is DisplayValue.Interpolated }, primary),
         PlotSeries(data.weights.map { it.movingAverage.kilograms },
@@ -149,13 +151,13 @@ private fun DashboardContent(data: DashboardData) {
         valueRange = 0f..days.lastIndex.toFloat(), steps = (days.size - 2).coerceAtLeast(0),
         modifier = Modifier.semantics { contentDescription = "詳細を表示する日付" })
     val daily = days[selected]
-    val cumulative = data.balances.cumulative[selected]
+    val periodCumulative = data.balances.periodCumulative[selected]
     val weight = data.weights[selected]
     Text(daily.date.toString(), style = MaterialTheme.typography.titleMedium)
     Text("摂取：${daily.source.intake.label("kcal")}／消費：${daily.source.burned.label("kcal")}")
     Text("日別収支：${daily.kilocalories.formatted("kcal")}${if (daily.isEstimated) "（推定）" else ""}")
-    Text("累積：${cumulative.kilocalories.formatted("kcal")}${if (cumulative.isEstimated) "（推定を含む）" else ""}")
-    if (!cumulative.isComplete) Text("算出可能日の小計：${cumulative.availableDaysSubtotalKilocalories.formatted("kcal")}（不完全・欠測${cumulative.missingDates.size}日${if (cumulative.isEstimated) "・推定を含む" else ""}）")
+    Text("期間累積収支：${periodCumulative.kilocalories.formatted("kcal")}${if (periodCumulative.isEstimated) "（推定を含む）" else ""}")
+    if (!periodCumulative.isComplete) Text("算出可能日の小計：${periodCumulative.availableDaysSubtotalKilocalories.formatted("kcal")}（不完全・欠測${periodCumulative.missingDates.size}日${if (periodCumulative.isEstimated) "・推定を含む" else ""}）")
     Text("体重：${weight.display.label("kg")}")
     val average = weight.movingAverage
     Text("${average.period.days}日移動平均：${average.kilograms.formatted("kg")}（実測${average.recordedDays}/${average.period.days}日${if (average.hasInsufficientDays) "・日数不足" else ""}）")
@@ -167,8 +169,9 @@ private data class PlotSeries(val values: List<Double?>, val estimated: List<Boo
 
 @Composable
 private fun TrendChart(title: String, unit: String, series: List<PlotSeries>, selected: Int,
-    bars: Boolean = false, includeZero: Boolean = false) {
+    bars: Boolean = false, includeZero: Boolean = false, initialValue: Double? = null, initialLabel: String = "") {
     Text(title, style = MaterialTheme.typography.titleMedium)
+    if (initialValue != null) Text("$initialLabel：${initialValue.formatted(unit)}", style = MaterialTheme.typography.labelMedium)
     val values = series.flatMap { it.values }.filterNotNull()
     val rawMin = values.minOrNull() ?: 0.0
     val rawMax = values.maxOrNull() ?: 1.0
@@ -186,6 +189,16 @@ private fun TrendChart(title: String, unit: String, series: List<PlotSeries>, se
         drawLine(grid, Offset(x(selected), 0f), Offset(x(selected), size.height), 2f)
         if (includeZero) drawLine(grid, Offset(0f, y(0.0)), Offset(size.width, y(0.0)))
         series.forEach { line ->
+            if (initialValue != null) {
+                val origin = Offset(0f, y(initialValue))
+                drawCircle(line.color, 3f, origin)
+                // Keep all daily x positions shared with the other graphs. The extra point is
+                // the range boundary; never bridge it over a missing first day's balance.
+                line.values.firstOrNull()?.let { first ->
+                    drawLine(line.color, origin, Offset(x(0), y(first)), 2f,
+                        pathEffect = if (line.estimated.first()) PathEffect.dashPathEffect(floatArrayOf(6f, 6f)) else null)
+                }
+            }
             line.values.forEachIndexed { index, value ->
                 if (value != null) {
                     val point = Offset(x(index), y(value))

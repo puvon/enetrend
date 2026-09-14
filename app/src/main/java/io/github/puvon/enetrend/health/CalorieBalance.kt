@@ -11,8 +11,9 @@ data class DailyCalorieBalance(
         (source.intake is DisplayValue.Interpolated || source.burned is DisplayValue.Interpolated)
 }
 
-/** Completeness refers to available daily balances, not completeness of source logging. */
-data class CumulativeCalorieBalance(
+/** Sum from startDate through date, inclusive. Completeness describes available daily balances,
+ * not completeness of source logging. The origin is before adding the first day's balance. */
+data class PeriodCumulativeCalorieBalance(
     val date: LocalDate,
     val startDate: LocalDate,
     val kilocalories: Double?,
@@ -27,8 +28,11 @@ data class CumulativeCalorieBalance(
 data class CalorieBalanceSeries(
     val range: HealthDataRange,
     val daily: List<DailyCalorieBalance>,
-    val cumulative: List<CumulativeCalorieBalance>,
-)
+    val periodCumulative: List<PeriodCumulativeCalorieBalance>,
+) {
+    /** A period boundary, not a zero-valued daily record, even when the first day is missing. */
+    val periodStartKilocalories: Double get() = 0.0
+}
 
 object CalorieBalanceCalculator {
     fun daily(source: DailyCalorieDisplay): DailyCalorieBalance {
@@ -39,7 +43,8 @@ object CalorieBalanceCalculator {
         return DailyCalorieBalance(source, balance)
     }
 
-    /** Project before cropping so interpolation can use records outside the selected range. */
+    /** Project before cropping so interpolation can use records outside the selected range.
+     * Only selected daily balances enter the sum; each call starts at zero for that range. */
     fun calculate(
         data: DailyCalorieData,
         range: HealthDataRange = data.range,
@@ -56,7 +61,7 @@ object CalorieBalanceCalculator {
         var sum = 0.0
         var correction = 0.0
         var count = 0
-        val cumulative = daily.map { day ->
+        val periodCumulative = daily.map { day ->
             val value = day.kilocalories
             if (value == null) {
                 missing.add(day.date)
@@ -69,14 +74,14 @@ object CalorieBalanceCalculator {
                 count++
                 if (day.isEstimated) estimated.add(day.date)
             }
-            CumulativeCalorieBalance(
+            PeriodCumulativeCalorieBalance(
                 day.date, range.startDate,
                 sum.takeIf { missing.isEmpty() && count > 0 },
                 sum.takeIf { count > 0 },
                 missing.toSet(), estimated.toSet(),
             )
         }
-        return CalorieBalanceSeries(range, daily, cumulative)
+        return CalorieBalanceSeries(range, daily, periodCumulative)
     }
 
     private fun DisplayValue.number(): Double? {

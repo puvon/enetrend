@@ -30,7 +30,7 @@ class DashboardLoaderTest {
         assertEquals(today.minusDays(58), source.ranges.first().startDate)
         assertEquals(today.minusDays(29), state.data.balances.range.startDate)
         assertEquals(30, state.data.balances.daily.size)
-        assertEquals(-6000.0, state.data.balances.cumulative.last().kilocalories!!, 0.0)
+        assertEquals(-6000.0, state.data.balances.periodCumulative.last().kilocalories!!, 0.0)
         assertFalse(state.data.historyLimited)
     }
 
@@ -46,7 +46,7 @@ class DashboardLoaderTest {
         val source = Source().apply { read = { CalorieTotals(null, null) } }
         val state = DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready
         assertFalse(state.data.hasData)
-        assertNull(state.data.balances.cumulative.last().kilocalories)
+        assertNull(state.data.balances.periodCumulative.last().kilocalories)
     }
 
     @Test fun failureIsNotRetriedAsMissingData() = runBlocking {
