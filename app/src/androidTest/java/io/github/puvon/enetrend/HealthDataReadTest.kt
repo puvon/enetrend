@@ -7,6 +7,9 @@ import io.github.puvon.enetrend.health.HealthAvailability
 import io.github.puvon.enetrend.health.HealthDataRange
 import io.github.puvon.enetrend.health.HealthDataRepository
 import io.github.puvon.enetrend.health.HealthDataResult
+import io.github.puvon.enetrend.health.DashboardLoader
+import io.github.puvon.enetrend.health.DashboardState
+import io.github.puvon.enetrend.health.MovingAveragePeriod
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.runBlocking
@@ -18,6 +21,21 @@ import org.junit.Rule
 
 class HealthDataReadTest {
     @get:Rule val activity = ActivityScenarioRule(MainActivity::class.java)
+
+    @Test fun readsDashboardPeriodThroughRealHealthConnect(): Unit = runBlocking {
+        val source = AndroidHealthDataSource(InstrumentationRegistry.getInstrumentation().targetContext)
+        assumeTrue(source.availability() == HealthAvailability.AVAILABLE)
+        assumeTrue(source.grantedPermissions().containsAll(source.requiredPermissions))
+        val zone = ZoneId.systemDefault()
+        val result = DashboardLoader(HealthDataRepository(source)).load(
+            LocalDate.now(zone), zone, 30, MovingAveragePeriod.SEVEN_DAYS,
+        )
+        assertTrue("Dashboard reads must succeed without exposing record values", result is DashboardState.Ready)
+        if (result is DashboardState.Ready) {
+            assertEquals(30, result.data.balances.daily.size)
+            assertEquals(30, result.data.weights.size)
+        }
+    }
 
     @Test fun readsRecentDataThroughRealHealthConnectWithoutWriting(): Unit = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
