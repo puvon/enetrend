@@ -10,6 +10,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.SnackbarHostState
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -17,6 +18,11 @@ import androidx.lifecycle.lifecycleScope
 import io.github.puvon.enetrend.health.AndroidHealthConnection
 import io.github.puvon.enetrend.health.HealthConnection
 import io.github.puvon.enetrend.health.HealthConnectionState
+import io.github.puvon.enetrend.health.AndroidHealthDataSource
+import io.github.puvon.enetrend.health.DashboardLoader
+import io.github.puvon.enetrend.health.HealthDataRepository
+import io.github.puvon.enetrend.health.MovingAveragePeriod
+import io.github.puvon.enetrend.ui.DashboardRoute
 import io.github.puvon.enetrend.ui.HealthConnectionScreen
 import io.github.puvon.enetrend.ui.theme.EnetrendTheme
 import kotlinx.coroutines.Job
@@ -24,6 +30,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val connection by lazy { HealthConnection(AndroidHealthConnection(this)) }
+    private val dashboardLoader by lazy { DashboardLoader(HealthDataRepository(AndroidHealthDataSource(this))) }
     private var state: HealthConnectionState by mutableStateOf(HealthConnectionState.Checking)
     private var actionError by mutableStateOf(false)
     private var checkJob: Job? = null
@@ -37,7 +44,22 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             EnetrendTheme {
-                HealthConnectionScreen(
+                var displayDays by rememberSaveable { mutableStateOf(30) }
+                var averageDays by rememberSaveable { mutableStateOf(7) }
+                if (state == HealthConnectionState.Ready) {
+                    DashboardRoute(
+                        loader = dashboardLoader,
+                        displayDays = displayDays,
+                        averagePeriod = MovingAveragePeriod.entries.first { it.days == averageDays },
+                        onDisplayDays = { displayDays = it },
+                        onAveragePeriod = { averageDays = it.days },
+                        onRetry = { refresh(notifyResult = true) },
+                        onSettings = { openExternal(Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)) },
+                        onPrivacy = { startActivity(Intent(this, PermissionsRationaleActivity::class.java)) },
+                        actionError = actionError,
+                        snackbarHostState = snackbarHostState,
+                    )
+                } else HealthConnectionScreen(
                     state = state,
                     actionError = actionError,
                     onRequestPermissions = { refresh(requestPermissions = true) },

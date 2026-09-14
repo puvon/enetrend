@@ -55,7 +55,7 @@ fun HealthConnectionScreen(
                     Button(onClick = onRequestPermissions) { Text("読み取り権限を許可") }
                     Text("権限画面が表示されない場合は Health Connect の設定で変更してください。")
                 }
-                HealthConnectionState.Ready -> Text("必要な読み取り権限が許可されています。データの取得・グラフ表示は今後追加されます。")
+                HealthConnectionState.Ready -> Text("必要な読み取り権限が許可されています。")
                 HealthConnectionState.Error -> Text("接続を確認できませんでした。しばらくしてから再確認してください。")
             }
             if (state is HealthConnectionState.PermissionsRequired || state == HealthConnectionState.Ready) {
