@@ -26,7 +26,8 @@ jobs:
 
       - name: Install Android SDK packages
         # Keep these aligned with app/build.gradle.kts and the AGP build tools requirement.
-        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37" "build-tools;36.0.0"'
+        # API 37 is published with a minor version in its package ID (37.0, not 37).
+        run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;36.0.0"'
 
       - name: Build debug APK
         # The wrapper is tracked without its executable bit. Do not depend on local.properties.

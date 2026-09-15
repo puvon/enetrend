@@ -264,6 +264,8 @@ Canvas での実現可能性は既存描画構造からの判断で、統合版�
   actionlint 1.7.12（公式配布チェックサム検証済み）、ローカルのtest / lint / :app:assembleDebug --no-daemon、pre-commit / gitleaksが成功。新規workflowはgitleaksで直接走査した。ローカルAPKの存在とAPI 34へのインストールを確認。アプリコード・Gradle設定は変更しておらず、Android全体回帰は今回は再実行していない。
   未確認: GitHub上でのmaster更新による起動・Ubuntu runnerでのビルド成功・14日保存設定の適用・artifactダウンロード・ダウンロードしたAPKのインストール。workflowは未commit／未pushで、Codexはmasterへmergeしないため、8.9全体のチェックは未完了のまま維持する。ユーザーがmasterへmerge・pushした後、GitHubのActions → Build debug APK → 成功したrun → Artifactsから取得して確認する。debug署名はrunnerで生成されるため、ローカル版や別runとの署名が異なる場合がある。9.2では上書きインストールできない場合の扱いも説明する。
   参照: [artifactの保存期間・設定](https://github.com/actions/upload-artifact#retention-period)、[Javaセットアップ](https://github.com/actions/setup-java)、[Ubuntu runner環境](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)。
+  CI修正（2026-09-16）: SDK導入時のFailed to find packageエラーは、workflowが存在しないplatforms;android-37を指定していたことが原因。ローカルSDKのpackage.xmlとGoogle公式repository2-3.xmlの両方で確認したplatforms;android-37.0へ修正した。compileSdk / targetSdkは37のまま維持する。修正後のGitHub実行成功・artifact取得は引き続き未確認。
+
 ## Phase 9: MVP 仕上げ
 
 - [ ] 9.1 一連の利用シナリオで MVP 完了条件を確認する。
