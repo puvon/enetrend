@@ -23,13 +23,24 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.rememberTextMeasurer
 import io.github.puvon.enetrend.health.DisplayValue
 import java.util.Locale
 
 @Composable
 internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: (Int) -> Unit) {
     val selectDay by rememberUpdatedState(onSelect)
-    val plotInset = 5.dp
+    val axisStyle = MaterialTheme.typography.labelSmall
+    val textMeasurer = rememberTextMeasurer()
+    val leftLabels = axisLabels(chart.dailyScale)
+    val rightLabels = axisLabels(chart.weightScale)
+    val density = LocalDensity.current
+    fun axisWidth(labels: List<String>) = with(density) {
+        labels.maxOf { textMeasurer.measure(it, axisStyle).size.width }.toDp() + 8.dp
+    }
+    val leftWidth = axisWidth(leftLabels)
+    val rightWidth = axisWidth(rightLabels)
+    val plotInset = with(density) { textMeasurer.measure("0", axisStyle).size.height.toDp() / 2 }
     val insetPx = with(LocalDensity.current) { plotInset.toPx() }
     val dailyColor = MaterialTheme.colorScheme.primary
     val cumulativeColor = MaterialTheme.colorScheme.tertiary
@@ -53,7 +64,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         Text(if (chart.weightScale != null) "体重 kg" else "体重データなし", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth().height(240.dp)) {
-        ChartAxis(chart.dailyScale, Modifier.width(56.dp))
+        ChartAxis(leftLabels, Modifier.width(leftWidth))
         Canvas(Modifier.weight(1f).fillMaxHeight().pointerInput(chart.range, chart.days.size, insetPx) {
             detectTapGestures { point ->
                 chartDayAt(point.x.toDouble(), size.width.toDouble(), insetPx.toDouble(), chart.days.size)?.let(selectDay)
@@ -123,9 +134,9 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                 line(averageColor, { it.movingAverageY }, { it.weight?.movingAverage?.hasInsufficientDays == true }, dotted = true)
             }
         }
-        ChartAxis(chart.weightScale, Modifier.width(48.dp))
+        ChartAxis(rightLabels, Modifier.width(rightWidth))
     }
-    Row(Modifier.fillMaxWidth().padding(start = 61.dp, end = 53.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(Modifier.fillMaxWidth().padding(start = leftWidth + plotInset, end = rightWidth + plotInset), horizontalArrangement = Arrangement.SpaceBetween) {
         Text("${chart.range.startDate.monthValue}/${chart.range.startDate.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
         val last = chart.range.endDateExclusive.minusDays(1)
         Text("${last.monthValue}/${last.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
@@ -142,9 +153,13 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
 }
 
 @Composable
-private fun ChartAxis(scale: ChartScale?, modifier: Modifier) {
-    Column(modifier.fillMaxHeight().padding(vertical = 5.dp), verticalArrangement = Arrangement.SpaceBetween) {
-        for (i in 0..4) Text(scale?.let { String.format(Locale.JAPAN, "%.1f", it.max - (it.max - it.min) * i / 4) } ?: "—",
+private fun ChartAxis(labels: List<String>, modifier: Modifier) {
+    Column(modifier.fillMaxHeight(), verticalArrangement = Arrangement.SpaceBetween) {
+        for (label in labels) Text(label, modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.labelSmall, maxLines = 1)
     }
+}
+
+private fun axisLabels(scale: ChartScale?): List<String> = (0..4).map { i ->
+    scale?.let { String.format(Locale.JAPAN, "%.1f", it.max - (it.max - it.min) * i / 4) } ?: "—"
 }

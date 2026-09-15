@@ -131,16 +131,17 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 private fun PeriodControls(displayDays: Int, averagePeriod: MovingAveragePeriod, onDisplayDays: (Int) -> Unit, onAveragePeriod: (MovingAveragePeriod) -> Unit) {
     Text("表示期間（今日まで）")
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(7, 14, 30).forEach { days ->
             FilterChip(selected = days == displayDays, onClick = { onDisplayDays(days) },
                 label = { Text("${days}日間") })
         }
     }
     Text("移動平均の計算期間")
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         MovingAveragePeriod.entries.forEach { period ->
             FilterChip(selected = period == averagePeriod, onClick = { onAveragePeriod(period) },
                 label = { Text("${period.days}日平均") })
