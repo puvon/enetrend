@@ -245,7 +245,7 @@ Canvas での実現可能性は既存描画構造からの判断で、統合版�
 
 ### MVP追加対応: 表示調整とAPKの自動ビルド
 
-8.1〜8.4の完了記録は維持する。以下の5項目もMVP必須とし、8.5→8.6→8.7→8.8→8.9の順に個別実装する。8.7は8.6のテーマ確認が前提。8.9はUI変更から独立して実施可能。すべての完了後に9.1・9.2で最終確認・利用手順へ反映する。8.5〜8.8は完了。次は8.9を個別依頼で実施する。
+8.1〜8.4の完了記録は維持する。以下の5項目もMVP必須とし、8.5→8.6→8.7→8.8→8.9の順に個別実装する。8.7は8.6のテーマ確認が前提。8.9はUI変更から独立して実施可能。すべての完了後に9.1・9.2で最終確認・利用手順へ反映する。8.5〜8.8は完了。8.9はworkflow作成・ローカル検証済みで、GitHub上の初回実行確認を残す。
 
 - [x] 8.5 再確認・Health Connect設定の操作を画面下部へ移す。
   `DashboardScreen`と`HealthConnectionScreen`を対象に、本文・グラフ・期間選択・詳細や状態説明の後の下部操作領域へ配置する。権限未付与・一部許可時も上部へ戻さず、短い画面では下寄せ、長い画面ではスクロールして到達できる構成にする。権限要求・再確認・設定・復帰の既存動作を維持する。完了条件: 通常・loading・エラー・空データ・権限不足で配置と到達性を確認し、文字拡大・横向きでも操作可能。既存UIテストのクリックを必要に応じてスクロール対応し、再取得・権限復帰の回帰を確認する。
@@ -258,8 +258,12 @@ Canvas での実現可能性は既存描画構造からの判断で、統合版�
   `DashboardChart`の共有line描画処理で、移動平均系列のみ各日の点・白抜き丸を描かないようにする。線種による他系列との区別、欠測区間を結ばない処理、実測のみの平均計算と日数不足の詳細表示は維持する。孤立した1点はマーカーを生成せず、値は日付詳細で確認できるようにする。実測体重・期間累積のマーカーへ影響させない。完了条件: 連続・欠測を挟む・1点のみの平均と他系列をUI／画像テストで確認し、共通日付選択と詳細表示の回帰も通す。
   8.6〜8.8完了: 端末テーマへの既存追従を再利用し、Android側にもvalues-nightのテーマを追加。正負の棒にはダイナミックカラーに左右されないライト／ダーク別の暖色・寒色を用意し、塗りのalpha=0.35と折れ線を後に描く順序を維持した。0は中立色、推定は正負色の白抜きとし、凡例に色の意味を追加。移動平均だけ点マーカーを無効にし、既存の点線・欠測を跨がない線・詳細値・日数不足表示を維持した。両テーマの棒の描画と、孤立した平均値／欠測区間で描画しないこと・連続した平均線の画像テスト2件を追加し、既存の単一プロット画像テストも配色へ追従させた。3項目の実装完了後に回帰をまとめて実施し、JVM105件・API 34 Android38件、test / lint / assembleDebug / assembleDebugAndroidTest、pre-commit / gitleaksが成功。初回Android実行のActivity終了待ちタイムアウトはエミュレータをデータ保持のまま再起動し、全38件を再実行して成功した。lintは既存警告16件・エラー0。API 34で実際のライト／ダーク切り替え、文字2倍、メイン・権限不足・プライバシー画面とシステムバー、ライトへ戻した後のグラフを画像で確認。端末設定はnight=no・font_scale=1.0、読み取り権限は元の3種類許可へ復元済み。API 33手動確認は方針により省略。
 - [ ] 8.9 master更新時にdebug APKを保存するGitHub Actions workflowを作成する。
-  現在`.github`のworkflowはない。`.github/workflows/`へworkflowを追加し、`master`へのpush（mergeによる更新を含む）を起点に、リポジトリのGradle Wrapperで`:app:assembleDebug`を実行する。AGP・compileSdk・Gradleと整合するJDK／Android SDKを用意する（現状はdaemon JVM 25・compileSdk 37。実装時に再確認）。runnerと各Actionの対応バージョンは実装時に公式仕様を確認し、ローカル設定やリリース署名のシークレットを前提にしない。成功時に`app/build/outputs/apk/debug/app-debug.apk`をダウンロード可能なartifactとして保存し、APKがない場合は失敗扱いにする。保存期間は14日を初期案とし、リポジトリの許容設定を確認して明示する。実行元commitが識別できるartifact名と最小限の権限を設定する。APKをGitへcommitしたりGitHub Releaseへ公開したりする処理は含めない。
+  実装前は`.github`のworkflowなし。`.github/workflows/`へworkflowを追加し、`master`へのpush（mergeによる更新を含む）を起点に、リポジトリのGradle Wrapperで`:app:assembleDebug`を実行する。AGP・compileSdk・Gradleと整合するJDK／Android SDKを用意する（現状はdaemon JVM 25・compileSdk 37。実装時に再確認）。runnerと各Actionの対応バージョンは実装時に公式仕様を確認し、ローカル設定やリリース署名のシークレットを前提にしない。成功時に`app/build/outputs/apk/debug/app-debug.apk`をダウンロード可能なartifactとして保存し、APKがない場合は失敗扱いにする。保存期間は14日を初期案とし、リポジトリの許容設定を確認して明示する。実行元commitが識別できるartifact名と最小限の権限を設定する。APKをGitへcommitしたりGitHub Releaseへ公開したりする処理は含めない。
   完了条件: workflowの構文・起動条件・ビルド・artifactパスを検証し、GitHub上でmaster更新により成功したrunとAPKのダウンロード・API 34エミュレータへのインストールを確認する。master更新とpushはユーザーのGit運用に従い、Codexが実行確認のためにmasterを変更しない。GitHubで未実行ならローカル検証と区別して未確認事項として残す。9.2で入手方法・保存期間・debug版であることを説明する。
+  実装・ローカル検証済み: `.github/workflows/debug-apk.yml`を追加。masterへのpushだけを契機にUbuntu 24.04でJava 25・SDK 37・Build Tools 36.0.0を用意し、Gradle Wrapperの`:app:assembleDebug`を実行する。checkout / setup-java / upload-artifactは公式タグから確認したSHAに固定し、contents: read・認証情報の非保持・30分タイムアウトを設定。APKは`enetrend-debug-<commit SHA>-<run attempt>`のartifactへ14日保存し、対象なしは失敗にする。Wrapperに実行ビットがないためbash経由で起動する。リリース署名・Release公開・Gitへの書き戻しは行わない。
+  actionlint 1.7.12（公式配布チェックサム検証済み）、ローカルのtest / lint / :app:assembleDebug --no-daemon、pre-commit / gitleaksが成功。新規workflowはgitleaksで直接走査した。ローカルAPKの存在とAPI 34へのインストールを確認。アプリコード・Gradle設定は変更しておらず、Android全体回帰は今回は再実行していない。
+  未確認: GitHub上でのmaster更新による起動・Ubuntu runnerでのビルド成功・14日保存設定の適用・artifactダウンロード・ダウンロードしたAPKのインストール。workflowは未commit／未pushで、Codexはmasterへmergeしないため、8.9全体のチェックは未完了のまま維持する。ユーザーがmasterへmerge・pushした後、GitHubのActions → Build debug APK → 成功したrun → Artifactsから取得して確認する。debug署名はrunnerで生成されるため、ローカル版や別runとの署名が異なる場合がある。9.2では上書きインストールできない場合の扱いも説明する。
+  参照: [artifactの保存期間・設定](https://github.com/actions/upload-artifact#retention-period)、[Javaセットアップ](https://github.com/actions/setup-java)、[Ubuntu runner環境](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md)。
 ## Phase 9: MVP 仕上げ
 
 - [ ] 9.1 一連の利用シナリオで MVP 完了条件を確認する。
