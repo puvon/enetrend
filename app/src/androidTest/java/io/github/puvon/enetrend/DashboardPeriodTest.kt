@@ -28,9 +28,11 @@ class DashboardPeriodTest {
         val nextGate = AtomicReference<CompletableDeferred<Unit>?>(null)
         val started = AtomicInteger()
         val cancelled = AtomicInteger()
+        @Volatile var fail = false
         override fun availability() = HealthAvailability.AVAILABLE
         override suspend fun grantedPermissions() = requiredPermissions
         override suspend fun readCalorieTotals(range: HealthDataRange): CalorieTotals {
+            if (fail) error("test read failure")
             nextGate.getAndSet(null)?.let { gate ->
                 started.incrementAndGet()
                 try { gate.await() } catch (e: CancellationException) { cancelled.incrementAndGet(); throw e }
@@ -46,6 +48,24 @@ class DashboardPeriodTest {
     private fun plot() = compose.onNodeWithContentDescription("統合グラフ。", substring = true)
     private fun waitForPlot() = compose.waitUntil(10000) {
         compose.onAllNodesWithContentDescription("統合グラフ。", substring = true).fetchSemanticsNodes().size == 1
+    }
+
+    @Test fun retryReloadsAfterReadFailureWithoutChangingPeriodOrLoader() {
+        val source = Source().apply { fail = true }
+        val loader = DashboardLoader(HealthDataRepository(source))
+        var version by mutableStateOf(0)
+        compose.setContent { EnetrendTheme {
+            DashboardRoute(loader, 30, MovingAveragePeriod.SEVEN_DAYS, {}, {}, { version++ }, {}, {}, false,
+                remember { SnackbarHostState() }, readVersion = version)
+        } }
+        compose.waitUntil(10000) {
+            compose.onAllNodesWithText("データを取得できませんでした。", substring = true).fetchSemanticsNodes().isNotEmpty()
+        }
+        plot().assertDoesNotExist()
+        source.fail = false
+        compose.onNodeWithText("再確認").performClick()
+        waitForPlot()
+        compose.onAllNodesWithText("データを取得できませんでした。", substring = true).assertCountEquals(0)
     }
 
     @Test fun rapidRequestsHideOldGraphAndCancelSupersededReads() {

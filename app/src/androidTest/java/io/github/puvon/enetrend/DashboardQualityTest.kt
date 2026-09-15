@@ -42,6 +42,37 @@ class DashboardQualityTest {
         assertTrue(summary().contains("期間累積収支：未算出"))
         assertTrue(summary().contains("体重：70.2 kg"))
         compose.onAllNodesWithContentDescription("統合グラフ。", substring = true).assertCountEquals(1)
+        compose.onNodeWithText("この期間の摂取カロリーは欠測です。", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("この期間に表示できる総消費カロリーがありません。", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun intakeOnlyExplainsMissingBurnedAndWeight() {
+        val range = range(3)
+        show(range, range.days().associate { it.date to CalorieTotals(1800.0, null) }, emptyList())
+        assertTrue(summary().contains("日別収支：未算出"))
+        compose.onNodeWithText("この期間に表示できる総消費カロリーがありません。", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("この期間に表示できる体重がありません。", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun burnedOnlyExplainsMissingIntake() {
+        val range = range(3)
+        show(range, range.days().associate { it.date to CalorieTotals(null, 2000.0) }, emptyList())
+        assertTrue(summary().contains("期間累積収支：未算出"))
+        compose.onNodeWithText("この期間の摂取カロリーは欠測です。", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun caloriesOnlyKeepBalanceAndExplainMissingWeight() {
+        val range = range(3)
+        show(range, range.days().associate { it.date to CalorieTotals(1800.0, 2000.0) }, emptyList())
+        assertTrue(summary().contains("期間累積収支：-600.0 kcal"))
+        compose.onNodeWithText("この期間に表示できる体重がありません。", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test fun earlierMeasurementStillAllowsAverageWhenPeriodHasNoWeight() {
+        show(range(3), emptyMap(), listOf(record(-1)))
+        assertTrue(summary().contains("体重：欠測"))
+        assertTrue(summary().contains("7日移動平均：69.9 kg（実測1/7日・日数不足）"))
+        compose.onNodeWithText("移動平均の実測日数が不足する日があります。", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun interpolationOnlyBaselineIsLabelled() {

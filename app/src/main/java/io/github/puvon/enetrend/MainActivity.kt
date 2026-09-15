@@ -33,6 +33,7 @@ class MainActivity : ComponentActivity() {
     private val dashboardLoader by lazy { DashboardLoader(HealthDataRepository(AndroidHealthDataSource(this))) }
     private var state: HealthConnectionState by mutableStateOf(HealthConnectionState.Checking)
     private var actionError by mutableStateOf(false)
+    private var readVersion by mutableStateOf(0)
     private var checkJob: Job? = null
     private val snackbarHostState = SnackbarHostState()
     private val permissionsLauncher = registerForActivityResult(
@@ -58,6 +59,7 @@ class MainActivity : ComponentActivity() {
                         onPrivacy = { startActivity(Intent(this, PermissionsRationaleActivity::class.java)) },
                         actionError = actionError,
                         snackbarHostState = snackbarHostState,
+                        readVersion = readVersion,
                     )
                 } else HealthConnectionScreen(
                     state = state,
@@ -99,6 +101,7 @@ class MainActivity : ComponentActivity() {
         actionError = false
         checkJob = lifecycleScope.launch {
             state = connection.check()
+            if (state == HealthConnectionState.Ready) readVersion++
             if (notifyResult) {
                 snackbarHostState.showSnackbar(
                     when (val result = state) {

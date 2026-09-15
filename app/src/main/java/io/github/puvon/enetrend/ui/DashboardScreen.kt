@@ -31,10 +31,11 @@ fun DashboardRoute(
     onPrivacy: () -> Unit,
     actionError: Boolean,
     snackbarHostState: SnackbarHostState,
+    readVersion: Int = 0,
 ) {
     // A new request gets its own state immediately; an old result cannot appear under new controls.
-    var state: DashboardState by remember(loader, displayDays, averagePeriod) { mutableStateOf(DashboardState.Loading) }
-    LaunchedEffect(loader, displayDays, averagePeriod) {
+    var state: DashboardState by remember(loader, displayDays, averagePeriod, readVersion) { mutableStateOf(DashboardState.Loading) }
+    LaunchedEffect(loader, displayDays, averagePeriod, readVersion) {
         state = DashboardState.Loading
         state = try {
             withContext(Dispatchers.IO) {
@@ -108,6 +109,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     if (data.historyLimited) Text("表示期間前のデータへのアクセスが制限されています。開始付近の平均・補間は利用できる記録だけに基づきます。")
     if (!data.hasData) {
         Text("この期間に表示できるデータがありません。")
+        Text("表示期間を変更するか、記録元のアプリと Health Connect の連携を確認してください。")
         controls()
         return
     }
@@ -115,6 +117,14 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     val selected = days.indexOfFirst { it.date.toString() == selectedDate }.takeIf { it >= 0 } ?: days.lastIndex
     DashboardChart(chart, selected) { onSelectedDate(days[it].date.toString()) }
     controls()
+    if (data.balances.daily.none { it.source.intake != DisplayValue.Missing })
+        Text("この期間の摂取カロリーは欠測です。記録元のアプリで記録・連携を確認してください。0 kcalとしては扱いません。")
+    if (data.balances.daily.none { it.source.burned != DisplayValue.Missing })
+        Text("この期間に表示できる総消費カロリーがありません。日別収支は未算出です。")
+    if (data.weights.none { it.display != DisplayValue.Missing })
+        Text("この期間に表示できる体重がありません。0 kgとしては扱いません。")
+    if (data.weights.any { it.movingAverage.hasInsufficientDays })
+        Text("移動平均の実測日数が不足する日があります。選択日の詳細で計算に使った日数を確認できます。")
     Text("表示期間の開始を0 kcalとして計算します。期間を変えると、同じ日の期間累積収支も変わります。")
     if (data.balances.periodCumulative.any { !it.isComplete }) Text("欠測日以降の期間累積収支は未算出です。詳細の小計は算出できた日のみです。")
     Text("グラフのタップまたはスライダーで日付を選択")

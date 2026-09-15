@@ -10,7 +10,7 @@ data class DashboardData(
 ) {
     val hasData: Boolean get() = balances.daily.any {
         it.source.intake != DisplayValue.Missing || it.source.burned != DisplayValue.Missing
-    } || weights.any { it.display != DisplayValue.Missing }
+    } || weights.any { it.display != DisplayValue.Missing || it.movingAverage.kilograms != null }
 }
 
 sealed interface DashboardState {
