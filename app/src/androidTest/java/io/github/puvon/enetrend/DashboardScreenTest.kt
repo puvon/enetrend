@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.toPixelMap
 import io.github.puvon.enetrend.health.*
 import io.github.puvon.enetrend.ui.DashboardScreen
 import io.github.puvon.enetrend.ui.theme.EnetrendTheme
+import io.github.puvon.enetrend.ui.theme.LocalBalanceColors
 import java.time.LocalDate
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
@@ -37,7 +38,8 @@ class DashboardScreenTest {
         var lineColors = emptyList<Color>()
         compose.setContent { EnetrendTheme {
             lineColors = listOf(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.secondary,
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.35f).compositeOver(MaterialTheme.colorScheme.background))
+                LocalBalanceColors.current.positive.copy(alpha = 0.35f).compositeOver(MaterialTheme.colorScheme.background),
+                LocalBalanceColors.current.negative.copy(alpha = 0.35f).compositeOver(MaterialTheme.colorScheme.background))
             DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
         } }
         val plot = compose.onNodeWithContentDescription("統合グラフ。", substring = true)

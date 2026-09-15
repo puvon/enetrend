@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.rememberTextMeasurer
 import io.github.puvon.enetrend.health.DisplayValue
 import java.util.Locale
+import io.github.puvon.enetrend.ui.theme.LocalBalanceColors
 
 @Composable
 internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: (Int) -> Unit) {
@@ -42,7 +43,8 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
     val rightWidth = axisWidth(rightLabels)
     val plotInset = with(density) { textMeasurer.measure("0", axisStyle).size.height.toDp() / 2 }
     val insetPx = with(LocalDensity.current) { plotInset.toPx() }
-    val dailyColor = MaterialTheme.colorScheme.primary
+    val dailyColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val balanceColors = LocalBalanceColors.current
     val cumulativeColor = MaterialTheme.colorScheme.tertiary
     val weightColor = MaterialTheme.colorScheme.onSurface
     val averageColor = MaterialTheme.colorScheme.secondary
@@ -59,6 +61,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         }
     }
     Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
+    Text("日別収支：＋は暖色／−は寒色／0は中立色", style = MaterialTheme.typography.labelSmall)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text("日別 kcal", style = MaterialTheme.typography.labelSmall)
         Text(if (chart.weightScale != null) "体重 kg" else "体重データなし", style = MaterialTheme.typography.labelSmall)
@@ -96,18 +99,24 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                 }
                 val barWidth = plotWidth / chart.days.size.coerceAtLeast(1) * 0.6f
                 chart.days.forEach { day -> day.dailyY?.let { value ->
+                    val balance = requireNotNull(day.daily?.kilocalories)
+                    val barColor = when {
+                        balance > 0 -> balanceColors.positive
+                        balance < 0 -> balanceColors.negative
+                        else -> dailyColor
+                    }
                     val top = minOf(y(value), y(chart.dailyZeroY))
                     val height = kotlin.math.abs(y(value) - y(chart.dailyZeroY))
                     if (height == 0f) {
                         drawLine(dailyColor, Offset(x(day.x) - barWidth / 2, top), Offset(x(day.x) + barWidth / 2, top), lineWidth)
                     } else {
                         val position = Offset(x(day.x) - barWidth / 2, top)
-                        if (day.daily?.isEstimated == true) drawRect(dailyColor, position, Size(barWidth, height), style = Stroke(lineWidth))
-                        else drawRect(dailyColor.copy(alpha = 0.35f), position, Size(barWidth, height))
+                        if (day.daily?.isEstimated == true) drawRect(barColor.copy(alpha = 0.7f), position, Size(barWidth, height), style = Stroke(lineWidth))
+                        else drawRect(barColor.copy(alpha = 0.35f), position, Size(barWidth, height))
                     }
                 } }
                 fun line(color: Color, value: (DashboardChartDay) -> Double?, estimated: (DashboardChartDay) -> Boolean,
-                    dotted: Boolean = false, origin: Boolean = false) {
+                    dotted: Boolean = false, origin: Boolean = false, markers: Boolean = true) {
                     if (origin) {
                         val start = Offset(x(chart.periodStartX), y(chart.periodStartY))
                         val baselineEstimated = chart.baseline?.source is DisplayValue.Interpolated
@@ -124,14 +133,16 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                             drawLine(color, Offset(x(previous.x), y(pv)), point, lineWidth,
                                 pathEffect = if (dotted) dots else if (estimated(day) || estimated(previous)) dash else null)
                         } }
-                        if (estimated(day)) drawCircle(color, 2.5.dp.toPx(), point, style = Stroke(lineWidth))
-                        else drawCircle(color, 2.dp.toPx(), point)
+                        if (markers) {
+                            if (estimated(day)) drawCircle(color, 2.5.dp.toPx(), point, style = Stroke(lineWidth))
+                            else drawCircle(color, 2.dp.toPx(), point)
+                        }
                     } }
                 }
                 line(cumulativeColor, { it.periodCumulativeY },
                     { it.periodCumulative?.isEstimated == true || chart.baseline?.source is DisplayValue.Interpolated }, origin = true)
                 line(weightColor, { it.weightY }, { it.weight?.display is DisplayValue.Interpolated })
-                line(averageColor, { it.movingAverageY }, { it.weight?.movingAverage?.hasInsufficientDays == true }, dotted = true)
+                line(averageColor, { it.movingAverageY }, { it.weight?.movingAverage?.hasInsufficientDays == true }, dotted = true, markers = false)
             }
         }
         ChartAxis(rightLabels, Modifier.width(rightWidth))
