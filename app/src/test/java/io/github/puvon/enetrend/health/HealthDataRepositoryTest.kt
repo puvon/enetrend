@@ -169,4 +169,17 @@ class HealthDataRepositoryTest {
         HealthDataRepository(source).read(range)
         Unit
     }
+
+    @Test fun laterPageFailureDiscardsEarlierRecordsAndRetryRestartsAtFirstPage() = runBlocking {
+        val source = Source()
+        source.pages = mapOf(null to WeightPage(listOf(weight("first")), "next"),
+            "next" to WeightPage(listOf(weight("second")), null))
+        source.onPage = { if (source.tokens.last() == "next") throw IOException() }
+        val repository = HealthDataRepository(source)
+        assertEquals(HealthDataResult.Error, repository.read(range))
+        source.onPage = {}
+        val result = repository.read(range) as HealthDataResult.Available
+        assertEquals(listOf("first", "second"), result.data.weights.map { it.id })
+        assertEquals(listOf(null, "next", null, "next"), source.tokens)
+    }
 }

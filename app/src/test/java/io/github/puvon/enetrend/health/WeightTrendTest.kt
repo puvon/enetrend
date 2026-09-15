@@ -99,4 +99,15 @@ class WeightTrendTest {
             record(1, 62.0).copy(time = date.atStartOfDay(dstZone).toInstant()))
         assertEquals(61.0, WeightTrendCalculator.calculate(records, HealthDataRange(date, date.plusDays(1), dstZone)).single().movingAverage.kilograms!!, 0.0)
     }
+
+    @Test fun midnightMeasurementBelongsToNextLocalDayRegardlessOfStoredOffset() {
+        val midnight = start.plusDays(1).atStartOfDay(zone).toInstant()
+        val before = record(0, 60.0).copy(time = midnight.minusNanos(1), zoneOffset = java.time.ZoneOffset.UTC)
+        val after = record(1, 62.0).copy(time = midnight, zoneOffset = java.time.ZoneOffset.UTC)
+        val result = WeightTrendCalculator.calculate(listOf(after, before), range(2))
+        assertEquals(before, result[0].recorded)
+        assertEquals(after, result[1].recorded)
+        assertEquals(61.0, result[1].movingAverage.kilograms!!, 0.0)
+        assertEquals(2, result[1].movingAverage.recordedDays)
+    }
 }

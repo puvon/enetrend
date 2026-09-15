@@ -11,6 +11,7 @@ import io.github.puvon.enetrend.health.HealthConnectionState
 import io.github.puvon.enetrend.ui.HealthConnectionScreen
 import io.github.puvon.enetrend.ui.theme.EnetrendTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 
@@ -52,6 +53,10 @@ class HealthConnectionScreenTest {
 
     @Test fun manifestAndRequestContainOnlyThreeReadPermissions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val allPermissions = context.packageManager.getPackageInfo(
+            context.packageName, PackageManager.GET_PERMISSIONS,
+        ).requestedPermissions.orEmpty()
+        assertFalse(allPermissions.contains("android.permission.INTERNET"))
         val permissions = context.packageManager.getPackageInfo(
             context.packageName, PackageManager.GET_PERMISSIONS,
         ).requestedPermissions.orEmpty().filter { it.startsWith("android.permission.health.") }.toSet()

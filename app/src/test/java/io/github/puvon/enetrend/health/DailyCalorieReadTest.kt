@@ -84,6 +84,13 @@ class DailyCalorieReadTest {
         assertEquals(HealthDataResult.AccessDenied, HealthDataRepository(source).readDailyCalories(range))
     }
 
+    @Test fun providerLostAfterFirstDayDiscardsSeriesAndStopsReading() = runBlocking {
+        val source = Source()
+        source.read = { source.status = HealthAvailability.UNAVAILABLE; CalorieTotals(100.0, 200.0) }
+        assertEquals(HealthDataResult.Unavailable, HealthDataRepository(source).readDailyCalories(range))
+        assertEquals(1, source.requests.size)
+    }
+
     @Test fun nonexistentLocalDayDoesNotIssueAnInvalidApiRange() = runBlocking {
         val source = Source()
         val range = HealthDataRange(LocalDate.of(2011, 12, 29), LocalDate.of(2012, 1, 1), ZoneId.of("Pacific/Apia"))

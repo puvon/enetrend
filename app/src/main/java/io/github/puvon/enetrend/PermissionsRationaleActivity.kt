@@ -32,7 +32,7 @@ class PermissionsRationaleActivity : ComponentActivity() {
                     ) {
                         Text("データの利用とプライバシー", style = MaterialTheme.typography.headlineSmall)
                         Text("EneTrend はカロリー収支と体重変化を分析・可視化するためのアプリです。")
-                        Text("栄養は摂取カロリー、総消費カロリーは収支の計算、体重は推移と移動平均の表示に使用するため、読み取り権限を要求します。現在のバージョンは接続と権限の確認までを行い、健康データの取得はまだ行いません。")
+                        Text("栄養は摂取カロリー、総消費カロリーは収支の計算、体重は推移と移動平均の表示に使用するため、読み取り権限を要求します。許可後、Health Connect から必要なデータを読み取り、端末内で集計・表示します。取得した健康データをアプリのファイルやデータベースには保存しません。")
                         Text("Health Connect への書き込みは行いません。健康データを外部へ送信したり、ログへ出力したりしません。")
                         Text("権限の許可は任意です。Health Connect の設定から、いつでも許可を変更・取り消しできます。必要な権限がない場合は接続済みとして扱いません。")
                         TextButton(onClick = { finish() }) { Text("閉じる") }
