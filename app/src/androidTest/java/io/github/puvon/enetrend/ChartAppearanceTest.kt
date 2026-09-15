@@ -10,6 +10,11 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
 import io.github.puvon.enetrend.health.*
 import io.github.puvon.enetrend.ui.*
 import io.github.puvon.enetrend.ui.theme.*
@@ -21,6 +26,32 @@ import org.junit.Test
 
 class ChartAppearanceTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun legendRestoresExpansionAndKeepsDateSelectionInBothThemes() {
+        val restoration = StateRestorationTester(compose)
+        var dark by mutableStateOf(false)
+        var selected by mutableStateOf(0)
+        restoration.setContent {
+            EnetrendTheme(darkTheme = dark) {
+                Column(Modifier.verticalScroll(rememberScrollState())) {
+                    DashboardChart(chart(), selected) { selected = it }
+                }
+            }
+        }
+        compose.onNodeWithText("凡例を開く")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "折りたたみ"))
+            .performClick()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("凡例を閉じる")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "展開中"))
+        compose.runOnIdle { dark = true }
+        compose.onNodeWithText("● 体重").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("統合グラフ。", substring = true).performScrollTo()
+            .performTouchInput { click(androidx.compose.ui.geometry.Offset(width - 2f, height / 2f)) }
+        compose.runOnIdle { assertEquals(2, selected) }
+        compose.onNodeWithText("凡例を閉じる").performScrollTo().performClick()
+        compose.onNodeWithText("● 体重").assertDoesNotExist()
+        compose.onNodeWithText("日別 kcal").performScrollTo().assertIsDisplayed()
+    }
     private val start = LocalDate.of(2026, 9, 1)
     private val range = HealthDataRange(start, start.plusDays(3), ZoneId.of("Asia/Tokyo"))
     private fun chart() = DashboardChartProjector.project(DashboardData(

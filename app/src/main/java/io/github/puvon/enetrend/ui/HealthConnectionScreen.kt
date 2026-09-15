@@ -44,7 +44,6 @@ fun HealthConnectionScreen(
             }
             TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
         }) {
-            Text("EneTrend", style = MaterialTheme.typography.headlineMedium)
             Text("Health Connect との接続")
             Text("カロリー収支と体重変化の分析のため、栄養・総消費カロリー・体重の読み取りを許可してください。")
             when (state) {

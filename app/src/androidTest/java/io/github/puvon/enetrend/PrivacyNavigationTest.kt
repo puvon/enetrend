@@ -21,6 +21,6 @@ class PrivacyNavigationTest {
         compose.waitUntil(15000) {
             compose.onAllNodesWithText("再確認").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("EneTrend").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("再確認").performScrollTo().assertIsDisplayed()
     }
 }

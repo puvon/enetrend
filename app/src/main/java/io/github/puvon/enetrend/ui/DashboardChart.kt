@@ -5,9 +5,13 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -30,6 +34,7 @@ import io.github.puvon.enetrend.ui.theme.LocalBalanceColors
 
 @Composable
 internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: (Int) -> Unit) {
+    var legendExpanded by rememberSaveable { mutableStateOf(false) }
     val selectDay by rememberUpdatedState(onSelect)
     val axisStyle = MaterialTheme.typography.labelSmall
     val textMeasurer = rememberTextMeasurer()
@@ -50,18 +55,23 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
     val averageColor = MaterialTheme.colorScheme.secondary
     val grid = MaterialTheme.colorScheme.outlineVariant
     Text("カロリー収支と体重", style = MaterialTheme.typography.titleMedium)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Column {
-            Text("■ 日別カロリー収支", color = dailyColor, style = MaterialTheme.typography.labelMedium)
-            Text("━ 期間累積収支", color = cumulativeColor, style = MaterialTheme.typography.labelMedium)
+    TextButton(onClick = { legendExpanded = !legendExpanded }, modifier = Modifier.semantics {
+        stateDescription = if (legendExpanded) "展開中" else "折りたたみ"
+    }) { Text(if (legendExpanded) "凡例を閉じる" else "凡例を開く") }
+    if (legendExpanded) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.weight(1f)) {
+                Text("■ 日別カロリー収支", color = dailyColor, style = MaterialTheme.typography.labelMedium)
+                Text("━ 期間累積収支", color = cumulativeColor, style = MaterialTheme.typography.labelMedium)
+            }
+            Column(Modifier.weight(1f)) {
+                Text("● 体重", color = weightColor, style = MaterialTheme.typography.labelMedium)
+                Text("┄ 移動平均", color = averageColor, style = MaterialTheme.typography.labelMedium)
+            }
         }
-        Column {
-            Text("● 体重", color = weightColor, style = MaterialTheme.typography.labelMedium)
-            Text("┄ 移動平均", color = averageColor, style = MaterialTheme.typography.labelMedium)
-        }
+        Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
+        Text("日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）／0は中立色", style = MaterialTheme.typography.labelSmall)
     }
-    Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
-    Text("日別収支：＋は暖色／−は寒色／0は中立色", style = MaterialTheme.typography.labelSmall)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text("日別 kcal", style = MaterialTheme.typography.labelSmall)
         Text(if (chart.weightScale != null) "体重 kg" else "体重データなし", style = MaterialTheme.typography.labelSmall)

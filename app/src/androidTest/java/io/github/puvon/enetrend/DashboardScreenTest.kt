@@ -137,6 +137,10 @@ class DashboardScreenTest {
         compose.setContent { EnetrendTheme {
             DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
         } }
+        compose.onNodeWithText("EneTrend").assertDoesNotExist()
+        compose.onNodeWithText("収支 = 摂取", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("■ 日別カロリー収支").assertDoesNotExist()
+        compose.onNodeWithText("凡例を開く").performScrollTo().performClick()
         compose.onNodeWithText("■ 日別カロリー収支").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("━ 期間累積収支").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").performScrollTo().assertIsDisplayed()
@@ -145,6 +149,9 @@ class DashboardScreenTest {
         compose.onNodeWithText("日別収支：-200.0 kcal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("算出可能日の小計：", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("体重：欠測").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("凡例を閉じる").performScrollTo().performClick()
+        compose.onNodeWithText("■ 日別カロリー収支").assertDoesNotExist()
+        compose.onNodeWithText("日別 kcal").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun accessFailureOffersRetry() {

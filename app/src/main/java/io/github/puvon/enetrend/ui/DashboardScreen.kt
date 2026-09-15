@@ -74,7 +74,6 @@ fun DashboardScreen(
                 if (actionError) Text("画面を開けませんでした。端末の設定から確認してください。")
                 TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
         }) {
-            Text("EneTrend", style = MaterialTheme.typography.headlineMedium)
             when (state) {
                 DashboardState.Loading -> {
                     CircularProgressIndicator()
@@ -103,7 +102,6 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     val days = chart.days
     val range = data.balances.range
     Text("${range.startDate} ～ ${range.endDateExclusive.minusDays(1)}")
-    Text("収支 = 摂取 − 消費（−：消費超過／＋：摂取超過）")
     if (data.historyLimited) Text("表示期間前のデータへのアクセスが制限されています。開始付近の平均・補間は利用できる記録だけに基づきます。")
     if (!data.hasData) {
         Text("この期間に表示できるデータがありません。")
