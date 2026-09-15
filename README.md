@@ -62,7 +62,7 @@ masterへのpush（mergeによる更新を含む）でdebug APKをビルドし�
 
 ## 開発・ビルド
 
-Windows / PowerShellを基準とします。Git運用・作業範囲は[AGENTS.md](AGENTS.md)、計画と検証履歴は[TODO.md](TODO.md)を参照してください。
+Windows / PowerShellを基準とします。Git運用・作業範囲は[AGENTS.md](AGENTS.md)、今後の計画は[TODO.md](TODO.md)、MVPの完了記録・確定仕様・検証履歴は[MVP開発履歴](docs/mvp-history.md)を参照してください。
 
 - Android SDK Platform 37.0（SDKパッケージIDは`platforms;android-37.0`）とBuild Tools 36.0.0
 - JDK 25（Gradle daemon）。Java/Kotlinのソース互換設定はJava 11
