@@ -19,11 +19,12 @@ MVP（Phase 0〜9）は完了。GitHub生成APKのダウンロード・インス
 
 ## Phase 10: MVP後の配布・画面・再取得の改善
 
-各番号を個別に依頼・実装・検証できる単位とする。10.1は独立、画面整理は10.2→10.3→10.4の順、累積仕様は10.5→合意後に10.6の順。10.7は累積仕様の決定を待たず実施できる。今回は計画のみで、実装には着手していない。
+各番号を個別に依頼・実装・検証できる単位とする。10.1は独立、画面整理は10.2→10.3→10.4の順、累積仕様は10.5→合意後に10.6の順。10.7は累積仕様の決定を待たず実施できる。10.1は実装・ローカル検証済み。GitHub上でのAPK単体取得・インストール確認を残す。その他は未着手。
 
 - [ ] 10.1 GitHub artifactをZIPなしのAPK配布へ変更する。
   `.github/workflows/debug-apk.yml`のupload-artifact v4をv7へ更新し、`archive: false`でAPK単体を保存する。既存のSHA固定方針に合わせる場合は公式v7の対応SHAを確認する。公式仕様では単一ファイルのみ対応し、`name`は無視されてファイル名がartifact名になるため、アップロード用APK名にcommit SHA・run attemptと`.apk`を含める。`compression-level: 0`だけではZIPをなくせないため不要な設定を整理する。master push起動・14日保存・ファイルなしで失敗・最小権限を維持する。
   完了条件: workflow構文・runner互換性・ビルドを検証し、ユーザーのmaster更新後にGitHubからZIP展開なしでAPKを取得・インストールできることを確認する。READMEの入手方法も更新する。参照: [upload-artifact公式仕様](https://github.com/actions/upload-artifact#inputs)。
+  実装・ローカル検証済み: upload-artifactを公式v7のcommit 043fb46d1a93c77aae656e7c1c64a875d1fc6a0a（Node 24）へ固定。既存Ubuntu 24.04のGitHub-hosted runnerを継続使用する。ビルドAPKをcommit SHA・run attempt付きの.apk名へコピーし、その単一パスをarchive: falseで保存する。無効になるnameと不要なcompression-levelを削除し、14日保存・master push・ファイルなしで失敗を維持した。READMEの入手手順も更新。actionlint、:app:assembleDebug --no-daemon、pre-commit（gitleaks）が成功。アプリコードは変更しておらず、JVM・Android回帰とlintは再実行していない。残確認: ユーザーによるmaster更新後のGitHub runでAPKをZIP展開なしに取得・インストールする。この確認まで10.1のチェックは未完了とする。
 
 - [ ] 10.2 メイン画面の重複した見出し・計算式を整理する。
   `DashboardScreen`の上部アプリ名と「収支 = 摂取 − 消費」の常設行を削除してグラフに使う領域を確保する。`HealthConnectionScreen`にも同じアプリ名見出しがあるため、接続画面を含めた削除範囲を実装前に確認する。ランチャーのアプリ名・プライバシー説明は変更対象にしない。収支の計算・符号は変更せず、正負の意味は凡例とREADMEで確認できるようにする。
@@ -51,7 +52,7 @@ MVP（Phase 0〜9）は完了。GitHub生成APKのダウンロード・インス
   操作後に権限確認と取得を開始し、loading・取得成功・空データ・失敗を区別する。表示期間・平均期間・範囲内の選択日を維持し、連打時の重複取得や古い結果の上書きを防ぐ。「即時」はHealth Connect内の最新データを読み直す意味とし、記録元アプリからの同期を強制する機能にはしない。
   完了条件: `DashboardPeriodTest`・`HealthReconnectTest`等を拡張して、同じ期間での再取得、データ更新の反映、失敗からの復帰、権限取消、連打を検証する。API 34で操作と通知を確認し、READMEを更新する。健康データの書き込みは追加しない。
 
-実装時は各項目に該当するtest / lint / build、pre-commit / gitleaksを実施する。今回のTODO整理では実装・テスト実行を行わない。
+実装時は各項目に該当するtest / lint / build、pre-commit / gitleaksを実施する。各項目の実行結果・未確認事項は上記の完了記録に残す。
 
 ## MVP 対象外
 
