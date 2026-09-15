@@ -32,7 +32,8 @@ fun DashboardRoute(
     actionError: Boolean,
     snackbarHostState: SnackbarHostState,
 ) {
-    var state: DashboardState by remember { mutableStateOf(DashboardState.Loading) }
+    // A new request gets its own state immediately; an old result cannot appear under new controls.
+    var state: DashboardState by remember(loader, displayDays, averagePeriod) { mutableStateOf(DashboardState.Loading) }
     LaunchedEffect(loader, displayDays, averagePeriod) {
         state = DashboardState.Loading
         state = try {
@@ -63,6 +64,8 @@ fun DashboardScreen(
     actionError: Boolean = false,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
+    // Keep the date through loading and restoration; changing display length starts at the latest day.
+    var selectedDate by rememberSaveable(displayDays) { mutableStateOf<String?>(null) }
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -84,7 +87,9 @@ fun DashboardScreen(
                     HealthDataResult.AccessDenied -> "データへのアクセスが制限されています。権限と読み取り可能な期間を確認してください。"
                     HealthDataResult.Error -> "データを取得できませんでした。再確認でやり直してください。"
                 })
-                is DashboardState.Ready -> DashboardContent(state.data) { PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod) }
+                is DashboardState.Ready -> DashboardContent(state.data, selectedDate, { selectedDate = it }) {
+                    PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
+                }
             }
             if (state !is DashboardState.Ready) PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
             TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
@@ -93,7 +98,8 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun DashboardContent(data: DashboardData, controls: @Composable () -> Unit) {
+private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelectedDate: (String) -> Unit,
+    controls: @Composable () -> Unit) {
     val chart = remember(data) { DashboardChartProjector.project(data) }
     val days = chart.days
     val range = data.balances.range
@@ -106,15 +112,13 @@ private fun DashboardContent(data: DashboardData, controls: @Composable () -> Un
         return
     }
 
-    var selected by rememberSaveable(range.startDate.toString(), range.endDateExclusive.toString()) {
-        mutableStateOf(days.lastIndex)
-    }
-    DashboardChart(chart, selected) { selected = it }
+    val selected = days.indexOfFirst { it.date.toString() == selectedDate }.takeIf { it >= 0 } ?: days.lastIndex
+    DashboardChart(chart, selected) { onSelectedDate(days[it].date.toString()) }
     controls()
     Text("表示期間の開始を0 kcalとして計算します。期間を変えると、同じ日の期間累積収支も変わります。")
     if (data.balances.periodCumulative.any { !it.isComplete }) Text("欠測日以降の期間累積収支は未算出です。詳細の小計は算出できた日のみです。")
     Text("グラフのタップまたはスライダーで日付を選択")
-    Slider(value = selected.toFloat(), onValueChange = { selected = it.roundToInt().coerceIn(0, days.lastIndex) },
+    Slider(value = selected.toFloat(), onValueChange = { onSelectedDate(days[it.roundToInt().coerceIn(0, days.lastIndex)].date.toString()) },
         valueRange = 0f..days.lastIndex.coerceAtLeast(1).toFloat(), steps = (days.size - 2).coerceAtLeast(0), enabled = days.size > 1,
         modifier = Modifier.semantics {
             contentDescription = "詳細を表示する日付"
