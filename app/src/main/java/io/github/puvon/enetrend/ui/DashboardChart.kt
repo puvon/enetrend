@@ -1,10 +1,13 @@
 package io.github.puvon.enetrend.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -12,6 +15,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -19,7 +27,10 @@ import io.github.puvon.enetrend.health.DisplayValue
 import java.util.Locale
 
 @Composable
-internal fun DashboardChart(chart: DashboardChartData, selected: Int) {
+internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: (Int) -> Unit) {
+    val selectDay by rememberUpdatedState(onSelect)
+    val plotInset = 5.dp
+    val insetPx = with(LocalDensity.current) { plotInset.toPx() }
     val dailyColor = MaterialTheme.colorScheme.primary
     val cumulativeColor = MaterialTheme.colorScheme.tertiary
     val weightColor = MaterialTheme.colorScheme.onSurface
@@ -43,11 +54,20 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int) {
     }
     Row(Modifier.fillMaxWidth().height(240.dp)) {
         ChartAxis(chart.dailyScale, Modifier.width(56.dp))
-        Canvas(Modifier.weight(1f).fillMaxHeight().semantics {
-            contentDescription = "統合グラフ。共通の日付軸に日別収支の棒、期間累積収支、体重、移動平均の線。数値は日付選択の下に表示。"
+        Canvas(Modifier.weight(1f).fillMaxHeight().pointerInput(chart.range, chart.days.size, insetPx) {
+            detectTapGestures { point ->
+                chartDayAt(point.x.toDouble(), size.width.toDouble(), insetPx.toDouble(), chart.days.size)?.let(selectDay)
+            }
+        }.semantics {
+            contentDescription = "統合グラフ。共通の日付軸に日別収支の棒、期間累積収支、体重、移動平均の線。タップで日付を選択。数値は日付選択の下に表示。"
+            stateDescription = chart.days.getOrNull(selected)?.detailLines()?.joinToString("。") ?: "選択できる日付がありません。"
+            customActions = buildList {
+                if (selected > 0) add(CustomAccessibilityAction("前の日") { selectDay(selected - 1); true })
+                if (selected < chart.days.lastIndex) add(CustomAccessibilityAction("次の日") { selectDay(selected + 1); true })
+            }
         }) {
             // Inset the common plot so edge points and extreme values remain visible.
-            val inset = 5.dp.toPx()
+            val inset = plotInset.toPx()
             val plotWidth = (size.width - 2 * inset).coerceAtLeast(1f)
             val plotHeight = (size.height - 2 * inset).coerceAtLeast(1f)
             fun x(value: Double) = inset + (plotWidth * value).toFloat()
