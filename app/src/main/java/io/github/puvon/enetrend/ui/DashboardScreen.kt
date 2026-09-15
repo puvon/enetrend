@@ -68,14 +68,13 @@ fun DashboardScreen(
     // Keep the date through loading and restoration; changing display length starts at the latest day.
     var selectedDate by rememberSaveable(displayDays) { mutableStateOf<String?>(null) }
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("EneTrend", style = MaterialTheme.typography.headlineMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ScreenWithBottomActions(Modifier.fillMaxSize().padding(padding), 16.dp, 12.dp, actions = {
                 TextButton(onClick = onRetry) { Text("再確認") }
                 TextButton(onClick = onSettings) { Text("Health Connect の設定") }
-            }
-            if (actionError) Text("画面を開けませんでした。端末の設定から確認してください。")
+                if (actionError) Text("画面を開けませんでした。端末の設定から確認してください。")
+                TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
+        }) {
+            Text("EneTrend", style = MaterialTheme.typography.headlineMedium)
             when (state) {
                 DashboardState.Loading -> {
                     CircularProgressIndicator()
@@ -93,7 +92,6 @@ fun DashboardScreen(
                 }
             }
             if (state !is DashboardState.Ready) PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
-            TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
         }
     }
 }

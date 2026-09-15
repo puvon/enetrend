@@ -20,7 +20,7 @@ class DashboardFailureTest {
         compose.setContent { EnetrendTheme {
             DashboardScreen(state, 30, MovingAveragePeriod.SEVEN_DAYS, {}, {}, { retries++ }, {}, {})
         } }
-        compose.onNodeWithText("データを読み込んでいます。").assertIsDisplayed()
+        compose.onNodeWithText("データを読み込んでいます。").performScrollTo().assertIsDisplayed()
         val failures = listOf(
             HealthDataResult.PermissionsRequired(setOf("read")) to "読み取り権限がありません。",
             HealthDataResult.Unavailable to "この端末では Health Connect を利用できません。",
@@ -30,10 +30,10 @@ class DashboardFailureTest {
         )
         failures.forEach { (reason, message) ->
             compose.runOnIdle { state = DashboardState.Failed(reason) }
-            compose.onNodeWithText(message, substring = true).assertIsDisplayed()
+            compose.onNodeWithText(message, substring = true).performScrollTo().assertIsDisplayed()
             compose.onNodeWithText("この期間に表示できるデータがありません。").assertDoesNotExist()
             compose.onAllNodesWithContentDescription("統合グラフ。", substring = true).assertCountEquals(0)
-            compose.onNodeWithText("再確認").performClick()
+            compose.onNodeWithText("再確認").performScrollTo().performClick()
         }
         compose.runOnIdle { assertEquals(failures.size, retries) }
     }
@@ -45,16 +45,16 @@ class DashboardFailureTest {
         compose.setContent { EnetrendTheme {
             HealthConnectionScreen(state, false, { requests++ }, { retries++ }, {}, {}, {})
         } }
-        compose.onNodeWithText("接続と権限を確認しています。").assertIsDisplayed()
+        compose.onNodeWithText("接続と権限を確認しています。").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("再確認").assertDoesNotExist()
         compose.runOnIdle { state = HealthConnectionState.Unavailable }
-        compose.onNodeWithText("この端末では Health Connect を利用できません。").assertIsDisplayed()
-        compose.onNodeWithText("再確認").performClick()
+        compose.onNodeWithText("この端末では Health Connect を利用できません。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("再確認").performScrollTo().performClick()
         compose.runOnIdle { state = HealthConnectionState.Error }
-        compose.onNodeWithText("接続を確認できませんでした。", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("再確認").performClick()
+        compose.onNodeWithText("接続を確認できませんでした。", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("再確認").performScrollTo().performClick()
         compose.runOnIdle { state = HealthConnectionState.PermissionsRequired(0) }
-        compose.onNodeWithText("0/3 許可済み", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("0/3 許可済み", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("読み取り権限を許可").performClick()
         compose.runOnIdle {
             assertEquals(2, retries)

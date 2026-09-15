@@ -4,6 +4,7 @@ import android.content.pm.PackageManager
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import io.github.puvon.enetrend.health.AndroidHealthConnection
@@ -30,7 +31,7 @@ class HealthConnectionScreenTest {
             }
         }
         compose.onNodeWithText("読み取り権限を許可").performClick()
-        compose.onNodeWithText("Health Connect の設定").performClick()
+        compose.onNodeWithText("Health Connect の設定").performScrollTo().performClick()
         compose.runOnIdle {
             assertEquals(1, requests)
             assertEquals(1, settings)

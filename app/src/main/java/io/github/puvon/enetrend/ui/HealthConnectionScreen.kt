@@ -32,11 +32,18 @@ fun HealthConnectionScreen(
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
 ) {
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
+        ScreenWithBottomActions(Modifier.fillMaxSize().padding(padding), 24.dp, 16.dp, actions = {
+            if (state is HealthConnectionState.PermissionsRequired || state == HealthConnectionState.Ready) {
+                TextButton(onClick = onSettings) { Text("Health Connect の設定") }
+            }
+            if (state != HealthConnectionState.Checking) {
+                TextButton(onClick = onRetry) { Text("再確認") }
+            }
+            if (actionError) {
+                Text("画面を開けませんでした。端末の設定から Health Connect を確認してください。", color = MaterialTheme.colorScheme.error)
+            }
+            TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
+        }) {
             Text("EneTrend", style = MaterialTheme.typography.headlineMedium)
             Text("Health Connect との接続")
             Text("カロリー収支と体重変化の分析のため、栄養・総消費カロリー・体重の読み取りを許可してください。")
@@ -58,16 +65,7 @@ fun HealthConnectionScreen(
                 HealthConnectionState.Ready -> Text("必要な読み取り権限が許可されています。")
                 HealthConnectionState.Error -> Text("接続を確認できませんでした。しばらくしてから再確認してください。")
             }
-            if (state is HealthConnectionState.PermissionsRequired || state == HealthConnectionState.Ready) {
-                TextButton(onClick = onSettings) { Text("Health Connect の設定") }
-            }
-            if (state != HealthConnectionState.Checking) {
-                TextButton(onClick = onRetry) { Text("再確認") }
-            }
-            if (actionError) {
-                Text("画面を開けませんでした。端末の設定から Health Connect を確認してください。", color = MaterialTheme.colorScheme.error)
-            }
-            TextButton(onClick = onPrivacy) { Text("データの利用とプライバシー") }
+
         }
     }
 }

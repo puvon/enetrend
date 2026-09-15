@@ -63,7 +63,7 @@ class DashboardPeriodTest {
         }
         plot().assertDoesNotExist()
         source.fail = false
-        compose.onNodeWithText("再確認").performClick()
+        compose.onNodeWithText("再確認").performScrollTo().performClick()
         waitForPlot()
         compose.onAllNodesWithText("データを取得できませんでした。", substring = true).assertCountEquals(0)
     }
