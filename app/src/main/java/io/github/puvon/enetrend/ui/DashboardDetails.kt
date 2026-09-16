@@ -1,12 +1,22 @@
 package io.github.puvon.enetrend.ui
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -27,6 +37,18 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 internal fun DashboardDetails(day: DashboardChartDay) {
+    var expanded by remember(day) { mutableStateOf<DashboardDetail?>(null) }
+    expanded?.let { detail ->
+        AlertDialog(onDismissRequest = { expanded = null },
+            title = { Text(detail.text.substringBefore('：') + "の参考情報") },
+            text = { Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(detail.text)
+                detail.statuses.filter { it !in listOf(DetailStatus.AVAILABLE, DetailStatus.MISSING, DetailStatus.UNAVAILABLE) }
+                    .forEach { Text(it.label) }
+                detail.notes.forEach { Text(it) }
+            } },
+            confirmButton = { TextButton(onClick = { expanded = null }) { Text("閉じる") } })
+    }
     Text(day.date.toString(), style = MaterialTheme.typography.titleMedium)
     day.details().forEach { detail ->
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
@@ -36,23 +58,23 @@ internal fun DashboardDetails(day: DashboardChartDay) {
                 it == DetailStatus.MISSING || it == DetailStatus.UNAVAILABLE
             }
             val iconAt = detail.text.indexOf('（').takeIf { it >= 0 } ?: detail.text.length
-            Text(buildAnnotatedString {
-                append(detail.text.substring(0, iconAt))
-                appendInlineContent("status")
-                append(detail.text.substring(iconAt))
-            }, style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.clearAndSetSemantics { text = AnnotatedString(detail.text) },
-                inlineContent = mapOf("status" to InlineTextContent(
-                    Placeholder(24.sp, 20.sp, PlaceholderVerticalAlign.Center)
-                ) { DetailStatusIcon(missing ?: DetailStatus.AVAILABLE) }))
-            // Vertical badges remain readable at large font sizes and narrow widths.
-            detail.statuses.filter { it !in listOf(DetailStatus.AVAILABLE, DetailStatus.MISSING, DetailStatus.UNAVAILABLE) }.forEach { status ->
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    DetailStatusIcon(status)
-                    Text(status.label, style = MaterialTheme.typography.labelMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(buildAnnotatedString {
+                    append(detail.text.substring(0, iconAt))
+                    appendInlineContent("status")
+                }, style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f, fill = false).clearAndSetSemantics { text = AnnotatedString(detail.text.substring(0, iconAt)) },
+                    inlineContent = mapOf("status" to InlineTextContent(
+                        Placeholder(24.sp, 20.sp, PlaceholderVerticalAlign.Center)
+                    ) { DetailStatusIcon(missing ?: DetailStatus.AVAILABLE) }))
+                val reference = detail.statuses.filter { it !in listOf(DetailStatus.AVAILABLE, DetailStatus.MISSING, DetailStatus.UNAVAILABLE) }
+                if (reference.isNotEmpty() || detail.notes.isNotEmpty()) {
+                    IconButton(onClick = { expanded = detail }, modifier = Modifier.semantics {
+                        contentDescription = detail.text.substringBefore('：') + "の参考情報"
+                        stateDescription = reference.joinToString("・") { it.label }
+                    }) { DetailStatusIcon(reference.firstOrNull() ?: DetailStatus.REFERENCE) }
                 }
             }
-            detail.notes.forEach { Text(it, style = MaterialTheme.typography.bodyMedium) }
         }
     }
 }

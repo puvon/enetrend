@@ -97,7 +97,7 @@ class DashboardPeriodTest {
         seven.complete(Unit)
         compose.waitForIdle()
         val today = LocalDate.now()
-        compose.onNodeWithText("期間開始（${today.minusDays(29)}）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（${today.minusDays(29)}）：0.0 kcal").assertDoesNotExist()
         assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：-6000.0 kcal"))
         compose.onNodeWithText("30日間").assertIsSelected()
     }
@@ -117,11 +117,13 @@ class DashboardPeriodTest {
         plot().performScrollTo().performTouchInput { click(Offset(1f, height / 2f)) }
         val first = LocalDate.now().minusDays(6).toString()
         assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].startsWith(first))
-        val baseline = compose.onNodeWithText("累積0の基準：", substring = true).fetchSemanticsNode().config[SemanticsProperties.Text]
+        compose.onNodeWithText("凡例を開く").performScrollTo().performClick()
+        val baseline = compose.onNodeWithText("右軸の中心：", substring = true).fetchSemanticsNode().config[SemanticsProperties.Text]
         compose.onNodeWithText("30日平均").performScrollTo().performClick()
         waitForPlot()
         assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].startsWith(first))
-        assertEquals(baseline, compose.onNodeWithText("累積0の基準：", substring = true).fetchSemanticsNode().config[SemanticsProperties.Text])
+        compose.onNodeWithText("凡例を開く").performScrollTo().performClick()
+        assertEquals(baseline, compose.onNodeWithText("右軸の中心：", substring = true).fetchSemanticsNode().config[SemanticsProperties.Text])
         restoration.emulateSavedInstanceStateRestore()
         waitForPlot()
         compose.onNodeWithText("7日間").assertIsSelected()

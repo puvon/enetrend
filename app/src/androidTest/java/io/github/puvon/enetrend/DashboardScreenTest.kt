@@ -50,7 +50,7 @@ class DashboardScreenTest {
         compose.onNodeWithText("期間開始（", substring = true).assertDoesNotExist()
         compose.runOnIdle { filled = true }
         compose.onNodeWithText("期間累積収支：0.0 kcal").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("期間開始（2026-09-01）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（2026-09-01）：0.0 kcal").assertDoesNotExist()
         compose.onNodeWithText("欠測日を除いた参考累積", substring = true).assertDoesNotExist()
     }
 
@@ -110,7 +110,9 @@ class DashboardScreenTest {
             if (kotlin.math.abs(p.red - cumulativeColor.red) < 0.02 && kotlin.math.abs(p.green - cumulativeColor.green) < 0.02 && kotlin.math.abs(p.blue - cumulativeColor.blue) < 0.02) coloredPixels++
         }
         assertTrue("Reference cumulative must continue after missing days", coloredPixels > 20)
-        compose.onNodeWithText("欠測日を除いた参考累積（不完全・欠測", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription("期間累積収支の参考情報").performScrollTo().performClick()
+        compose.onNodeWithText("欠測日を除いた参考累積（不完全・欠測", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("閉じる").performClick()
     }
 
     @Test fun changingDisplayPeriodUpdatesOriginAndDisplayedTotal() {
@@ -124,10 +126,10 @@ class DashboardScreenTest {
                 WeightTrendCalculator.calculate(emptyList(), selected), false)
             DashboardScreen(DashboardState.Ready(data), days, MovingAveragePeriod.SEVEN_DAYS, { days = it }, {}, {}, {}, {})
         } }
-        compose.onNodeWithText("期間開始（2026-08-16）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（2026-08-16）：0.0 kcal").assertDoesNotExist()
         compose.onNodeWithText("期間累積収支：-3000.0 kcal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("7日間").performScrollTo().performClick()
-        compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").assertDoesNotExist()
         compose.onNodeWithText("期間累積収支：-700.0 kcal").performScrollTo().assertIsDisplayed()
     }
 
@@ -173,9 +175,11 @@ class DashboardScreenTest {
         compose.onNodeWithText("凡例を開く").performScrollTo().performClick()
         compose.onNodeWithText("■ 日別カロリー収支").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("━ 期間累積収支").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("欠測日を除いた参考累積（不完全・欠測", substring = true).performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("期間累積は独立スケール（体重との連動なし）").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").assertDoesNotExist()
+        compose.onNodeWithContentDescription("期間累積収支の参考情報").performScrollTo().performClick()
+        compose.onNodeWithText("欠測日を除いた参考累積（不完全・欠測", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("閉じる").performClick()
+        compose.onNodeWithText("換算 kg（体重なし）").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("日別収支：-200.0 kcal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("算出可能日の小計：", substring = true).assertDoesNotExist()
         compose.onNodeWithText("体重：欠測").performScrollTo().assertIsDisplayed()

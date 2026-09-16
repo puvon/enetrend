@@ -50,12 +50,13 @@ class DashboardChartTest {
         assertSame(input.balances.periodCumulative[0], chart.days[0].periodCumulative)
     }
 
-    @Test fun recordedBaselineTakesPriorityOverEarlierInterpolation() {
+    @Test fun earliestInterpolationCentersAxisAndCumulative() {
         val interpolated = DisplayValue.Interpolated(69.0, start.minusDays(1), start.plusDays(1))
         val chart = DashboardChartProjector.project(data(listOf(0.0, 0.0), listOf(
             weight(0, interpolated), weight(1, DisplayValue.Recorded(70.0)))))
-        assertEquals(start.plusDays(1), chart.baseline?.date)
-        close(70.0, chart.baseline?.kilograms)
+        assertEquals(start, chart.baseline?.date)
+        close(69.0, chart.baseline?.kilograms)
+        close(0.5, chart.periodStartY)
         assertEquals(interpolated, chart.days[0].weight?.display)
     }
 
@@ -66,12 +67,14 @@ class DashboardChartTest {
         close(70.0, chart.baseline?.kilograms)
     }
 
-    @Test fun noWeightUsesIndependentCumulativeScale() {
+    @Test fun noWeightUsesZeroCenteredKilogramConversion() {
         val chart = DashboardChartProjector.project(data(listOf(-300.0, -14000.0)))
         assertFalse(chart.isPeriodCumulativeWeightLinked)
-        assertNull(chart.weightScale)
-        close(-14300.0, chart.independentPeriodCumulativeScale?.min)
-        close(-14000.0, chart.dailyScale.min)
+        assertNull(chart.independentPeriodCumulativeScale)
+        close(-14300.0 / 7000, chart.weightScale?.min)
+        close(14300.0 / 7000, chart.weightScale?.max)
+        close(0.5, chart.periodStartY)
+        close(-20000.0, chart.dailyScale.min)
         assertTrue(chart.days.all { it.weightY == null })
     }
 
@@ -80,7 +83,7 @@ class DashboardChartTest {
         val default = DashboardChartProjector.project(input)
         val changed = DashboardChartProjector.project(input, 3500.0)
         assertEquals(default.dailyScale, changed.dailyScale)
-        close(-300.0, default.dailyScale.min)
+        close(-400.0, default.dailyScale.min)
         close(70.0 - 9000.0 / 3500.0, changed.weightScale?.min)
         assertEquals(default.days.map { it.periodCumulative }, changed.days.map { it.periodCumulative })
     }
@@ -100,6 +103,7 @@ class DashboardChartTest {
         assertTrue(chart.days.all { it.dailyY == null && it.periodCumulativeY == null && it.weightY == null && it.movingAverageY == null })
         assertTrue(chart.periodStartY.isFinite())
         assertFalse(chart.hasPeriodCumulative)
+        assertNull(chart.weightScale)
     }
 
     @Test fun singleZeroDayAndConstantWeightHaveFiniteCoordinates() {
@@ -118,10 +122,12 @@ class DashboardChartTest {
         close(chart.dailyZeroY, chart.days[2].dailyY)
     }
 
-    @Test fun averageWithoutInRangeWeightDoesNotBecomeBaseline() {
+    @Test fun averageWithoutInRangeWeightCentersAxisAndCumulative() {
         val chart = DashboardChartProjector.project(data(listOf(-300.0), listOf(weight(0, DisplayValue.Missing, 70.0))))
-        assertNull(chart.baseline)
-        assertNotNull(chart.independentPeriodCumulativeScale)
+        assertTrue(chart.baseline!!.isMovingAverage)
+        close(70.0, chart.baseline?.kilograms)
+        close(0.5, chart.periodStartY)
+        assertNull(chart.independentPeriodCumulativeScale)
         assertNull(chart.days.single().weightY)
         close(0.5, chart.days.single().movingAverageY)
     }
@@ -151,6 +157,19 @@ class DashboardChartTest {
         close(chart.periodStartY, chart.days.first().periodCumulativeY)
         assertTrue(chart.days.all { it.periodCumulativeY != null })
         assertTrue(chart.periodStartY.isFinite())
+    }
+
+    @Test fun dailyTicksAreSymmetricNiceIntegersAndContainAllValues() {
+        for (values in listOf(emptyList(), listOf(0.0), listOf(0.1), listOf(-0.1),
+            listOf(-713.5, 25.0), listOf(30000.0))) {
+            val scale = ChartScale.daily(values)
+            close(0.5, scale.y(0.0))
+            close(-scale.min, scale.max)
+            val step = (scale.max - scale.min) / 4
+            assertTrue(step >= 5.0)
+            close(0.0, step % 5)
+            values.forEach { assertTrue(scale.y(it) in 0.0..1.0) }
+        }
     }
 
     @Test fun rejectsInvalidCoefficients() {

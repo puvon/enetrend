@@ -22,6 +22,30 @@ import org.junit.Test
 class DashboardDetailsTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun referenceDetailsOpenCloseAndResetWhenDateChanges() {
+        val start = LocalDate.of(2026, 9, 1)
+        val range = HealthDataRange(start, start.plusDays(3), ZoneId.of("Asia/Tokyo"))
+        val chart = DashboardChartProjector.project(DashboardData(
+            CalorieBalanceCalculator.calculate(DailyCalorieData(range, mapOf(
+                start to CalorieTotals(100.0, 200.0), start.plusDays(2) to CalorieTotals(200.0, 200.0)))),
+            WeightTrendCalculator.calculate(emptyList(), range), false))
+        var selected by mutableStateOf(1)
+        compose.setContent { EnetrendTheme {
+            Column(Modifier.verticalScroll(rememberScrollState())) { DashboardDetails(chart.days[selected]) }
+        } }
+        val explanation = "欠測日を除いた参考累積（不完全・欠測1日を除外）"
+        compose.onNodeWithText(explanation).assertDoesNotExist()
+        val button = compose.onNodeWithContentDescription("期間累積収支の参考情報")
+        button.performScrollTo().performClick()
+        compose.onNodeWithText(explanation).assertIsDisplayed()
+        compose.onNodeWithText("閉じる").performClick()
+        compose.onNodeWithText(explanation).assertDoesNotExist()
+        button.performClick()
+        compose.runOnIdle { selected = 0 }
+        compose.onNodeWithText("閉じる").assertDoesNotExist()
+        compose.onNodeWithText(explanation).assertDoesNotExist()
+    }
+
     @Test fun enlargedDetailsKeepValuesAndStatesReadableInBothThemes() {
         val start = LocalDate.of(2026, 9, 1)
         val range = HealthDataRange(start, start.plusDays(2), ZoneId.of("Asia/Tokyo"))

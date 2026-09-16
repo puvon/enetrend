@@ -38,7 +38,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
     val selectDay by rememberUpdatedState(onSelect)
     val axisStyle = MaterialTheme.typography.labelSmall
     val textMeasurer = rememberTextMeasurer()
-    val leftLabels = axisLabels(chart.dailyScale)
+    val leftLabels = axisLabels(chart.dailyScale, decimals = 0)
     val rightLabels = axisLabels(chart.weightScale)
     val density = LocalDensity.current
     fun axisWidth(labels: List<String>) = with(density) {
@@ -72,10 +72,15 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
         Text("期間累積の破線：補間由来の推定、または欠測日を除いた参考累積。詳細で区別します。", style = MaterialTheme.typography.labelSmall)
         Text("日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）／0は中立色", style = MaterialTheme.typography.labelSmall)
+        Text("期間累積は期間開始を0とし、右軸の中央から描画します。1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
+        chart.baseline?.let {
+            val source = if (it.isMovingAverage) "移動平均" else if (it.source is DisplayValue.Interpolated) "補間" else "実測"
+            Text("右軸の中心：${it.date} ${String.format(Locale.JAPAN, "%.1f", it.kilograms)} kg（$source）", style = MaterialTheme.typography.labelSmall)
+        } ?: Text("体重・移動平均なし：右軸は0中心の換算尺度です。体重の記録ではありません。", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text("日別 kcal", style = MaterialTheme.typography.labelSmall)
-        Text(if (chart.weightScale != null) "体重 kg" else "体重データなし", style = MaterialTheme.typography.labelSmall)
+        Text(if (chart.baseline != null) "体重 kg" else "換算 kg（体重なし）", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth().height(240.dp)) {
         ChartAxis(leftLabels, Modifier.width(leftWidth))
@@ -164,17 +169,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         val last = chart.range.endDateExclusive.minusDays(1)
         Text("${last.monthValue}/${last.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
     }
-    if (chart.hasPeriodCumulative) {
-        Text("期間開始（${chart.range.startDate}）：0.0 kcal", style = MaterialTheme.typography.labelMedium)
-        chart.baseline?.let {
-            Text("累積0の基準：${it.date} ${String.format(Locale.JAPAN, "%.1f", it.kilograms)} kg${if (it.source is DisplayValue.Interpolated) "（補間）" else "（実測）"}", style = MaterialTheme.typography.labelSmall)
-            Text("期間累積は右軸の1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
-        } ?: run {
-            val scale = requireNotNull(chart.independentPeriodCumulativeScale)
-            Text("期間累積は独立スケール（体重との連動なし）", style = MaterialTheme.typography.labelMedium)
-            Text("期間累積の範囲：${String.format(Locale.JAPAN, "%.1f ～ %.1f kcal", scale.min, scale.max)}", style = MaterialTheme.typography.labelSmall)
-        }
-    } else Text("期間累積収支：算出できる日がありません。", style = MaterialTheme.typography.labelMedium)
+    if (!chart.hasPeriodCumulative) Text("期間累積収支：算出できる日がありません。", style = MaterialTheme.typography.labelMedium)
 }
 
 @Composable
@@ -185,6 +180,6 @@ private fun ChartAxis(labels: List<String>, modifier: Modifier) {
     }
 }
 
-private fun axisLabels(scale: ChartScale?): List<String> = (0..4).map { i ->
-    scale?.let { String.format(Locale.JAPAN, "%.1f", it.max - (it.max - it.min) * i / 4) } ?: "—"
+private fun axisLabels(scale: ChartScale?, decimals: Int = 1): List<String> = (0..4).map { i ->
+    scale?.let { String.format(Locale.JAPAN, "%.${decimals}f", it.max - (it.max - it.min) * i / 4) } ?: "—"
 }

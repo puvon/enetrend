@@ -61,9 +61,9 @@ class DashboardSelectionScreenTest {
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "欠測"))
         compose.onNodeWithText("期間累積収支：-100.0 kcal").performScrollTo()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "参考累積"))
-        compose.onNodeWithText("体重：71.0 kg（補間：", substring = true).performScrollTo()
+        compose.onNodeWithText("体重：71.0 kg").performScrollTo()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "補間"))
-        compose.onNodeWithText("体重：71.0 kg（補間：", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("体重：71.0 kg").performScrollTo().assertIsDisplayed()
         slider().performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
         assertTrue(description().contains("2026-09-01。"))
         plot().performScrollTo().assertIsDisplayed()

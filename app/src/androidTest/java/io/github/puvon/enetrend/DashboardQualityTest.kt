@@ -78,7 +78,8 @@ class DashboardQualityTest {
     @Test fun interpolationOnlyBaselineIsLabelled() {
         val range = range(3)
         show(range, range.days().associate { it.date to CalorieTotals(1800.0, 2000.0) }, listOf(record(-1), record(3)))
-        compose.onNodeWithText("累積0の基準：2026-09-01 70.0 kg（補間）").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("凡例を開く").performScrollTo().performClick()
+        compose.onNodeWithText("右軸の中心：2026-09-01 70.0 kg（補間）").performScrollTo().assertIsDisplayed()
         assertTrue(summary().contains("体重：70.2 kg（補間："))
         assertTrue(summary().contains("期間累積収支：-600.0 kcal"))
     }
@@ -98,7 +99,7 @@ class DashboardQualityTest {
     @Test fun enlargedTextAndLargeCumulativeKeepAxisLabelsAndControlsReadable() {
         val range = range(30)
         show(range, range.days().associate { it.date to CalorieTotals(600.0, 2000.0) }, listOf(record(0), record(29)), 2f)
-        val axis = compose.onNodeWithText("-1400.0")
+        val axis = compose.onNodeWithText("-2000")
         axis.performScrollTo().assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
         axis.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }

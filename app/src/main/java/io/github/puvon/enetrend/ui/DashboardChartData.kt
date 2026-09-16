@@ -17,7 +17,8 @@ data class DashboardChartDay(
 )
 
 /** The source remains available so a baseline taken from interpolation can be labelled. */
-data class ChartWeightBaseline(val date: LocalDate, val source: DisplayValue, val kilograms: Double)
+data class ChartWeightBaseline(val date: LocalDate, val source: DisplayValue, val kilograms: Double,
+    val isMovingAverage: Boolean = false)
 
 data class ChartScale(val min: Double, val max: Double) {
     init { require(min.isFinite() && max.isFinite() && max > min && (max - min).isFinite()) }
@@ -28,6 +29,19 @@ data class ChartScale(val min: Double, val max: Double) {
     }
 
     companion object {
+        internal fun centered(values: List<Double>, center: Double): ChartScale {
+            val radius = values.maxOfOrNull { kotlin.math.abs(it - center) }?.coerceAtLeast(0.5) ?: 0.5
+            return ChartScale(center - radius, center + radius)
+        }
+
+        internal fun daily(values: List<Double>): ChartScale {
+            val requiredStep = (values.maxOfOrNull { kotlin.math.abs(it) } ?: 0.0) / 2
+            val magnitude = Math.pow(10.0, kotlin.math.floor(kotlin.math.log10(requiredStep.coerceAtLeast(5.0))))
+            val step = listOf(1.0, 2.0, 5.0, 10.0).map { it * magnitude }
+                .first { it >= requiredStep && it >= 5.0 }
+            return ChartScale(-2 * step, 2 * step)
+        }
+
         internal fun covering(values: List<Double>, includeZero: Boolean): ChartScale {
             require(values.all { it.isFinite() })
             val bounds = if (includeZero) values + 0.0 else values
@@ -71,24 +85,20 @@ object DashboardChartProjector {
         val weights = index(data.weights, range) { it.date }
         require(cumulative.values.all { it.startDate == range.startDate })
         val orderedWeights = dates.mapNotNull { weights[it] }
-        val baselineDay = orderedWeights.firstOrNull { it.display is DisplayValue.Recorded }
-            ?: orderedWeights.firstOrNull { it.display is DisplayValue.Interpolated }
+        val baselineDay = orderedWeights.firstOrNull { it.display.number() != null }
+            ?: orderedWeights.firstOrNull { it.movingAverage.kilograms != null }
         val baseline = baselineDay?.let {
-            ChartWeightBaseline(it.date, it.display, requireNotNull(it.display.number()))
+            ChartWeightBaseline(it.date, it.display, requireNotNull(it.display.number() ?: it.movingAverage.kilograms),
+                isMovingAverage = it.display.number() == null)
         }
-        val dailyScale = ChartScale.covering(daily.values.mapNotNull { it.kilocalories }, true)
+        val dailyScale = ChartScale.daily(daily.values.mapNotNull { it.kilocalories })
         fun cumulativePosition(value: Double): Double =
-            baseline?.let { it.kilograms + value / kilocaloriesPerKilogram } ?: value
+            (baseline?.kilograms ?: 0.0) + value / kilocaloriesPerKilogram
         val cumulativeValues = cumulative.values.mapNotNull { it.kilocalories }.map(::cumulativePosition)
         val weightValues = orderedWeights.flatMap { listOfNotNull(it.display.number(), it.movingAverage.kilograms) }
-        val weightScale = if (baseline != null) {
-            ChartScale.covering(weightValues + cumulativeValues + baseline.kilograms, false)
-        } else if (weightValues.isNotEmpty()) {
-            // An average from earlier records can exist without an in-range baseline.
-            ChartScale.covering(weightValues, false)
-        } else null
-        val independent = if (baseline == null) ChartScale.covering(cumulativeValues, true) else null
-        val cumulativeScale = requireNotNull(if (baseline != null) weightScale else independent)
+        val weightScale = if (weightValues.isNotEmpty() || cumulativeValues.isNotEmpty())
+            ChartScale.centered(weightValues + cumulativeValues, baseline?.kilograms ?: 0.0) else null
+        val cumulativeScale = weightScale ?: ChartScale(-0.5, 0.5)
         val days = dates.mapIndexed { i, date ->
             val day = daily[date]
             val period = cumulative[date]
@@ -101,7 +111,7 @@ object DashboardChartProjector {
                 weight?.movingAverage?.kilograms?.let { requireNotNull(weightScale).y(it) },
             )
         }
-        return DashboardChartData(range, days, dailyScale, weightScale, independent, baseline,
+        return DashboardChartData(range, days, dailyScale, weightScale, null, baseline,
             kilocaloriesPerKilogram, dailyScale.y(0.0), cumulativeScale.y(cumulativePosition(data.balances.periodStartKilocalories)))
     }
 
