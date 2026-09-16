@@ -85,11 +85,11 @@ class DashboardChartTest {
         assertEquals(default.days.map { it.periodCumulative }, changed.days.map { it.periodCumulative })
     }
 
-    @Test fun missingCumulativeNeverUsesSubtotalOrZero() {
+    @Test fun missingDailyKeepsReferenceCumulativeCoordinates() {
         val chart = DashboardChartProjector.project(data(listOf(-300.0, null, 200.0)))
         assertNull(chart.days[1].dailyY)
-        assertNull(chart.days[1].periodCumulativeY)
-        assertNull(chart.days[2].periodCumulativeY)
+        close(chart.days[0].periodCumulativeY!!, chart.days[1].periodCumulativeY)
+        assertNotNull(chart.days[2].periodCumulativeY)
         close(-100.0, chart.days[2].periodCumulative?.availableDaysSubtotalKilocalories)
         assertEquals(setOf(start.plusDays(1)), chart.days[2].periodCumulative?.missingDates)
     }
@@ -99,6 +99,7 @@ class DashboardChartTest {
         assertEquals(2, chart.days.size)
         assertTrue(chart.days.all { it.dailyY == null && it.periodCumulativeY == null && it.weightY == null && it.movingAverageY == null })
         assertTrue(chart.periodStartY.isFinite())
+        assertFalse(chart.hasPeriodCumulative)
     }
 
     @Test fun singleZeroDayAndConstantWeightHaveFiniteCoordinates() {
@@ -147,8 +148,8 @@ class DashboardChartTest {
         val chart = DashboardChartProjector.project(DashboardData(balances, emptyList(), false))
         assertTrue(chart.days[1].daily!!.isEstimated)
         assertTrue(chart.days[1].periodCumulative!!.isEstimated)
-        assertNull(chart.days.first().periodCumulativeY)
-        assertTrue(chart.days.all { it.periodCumulativeY == null })
+        close(chart.periodStartY, chart.days.first().periodCumulativeY)
+        assertTrue(chart.days.all { it.periodCumulativeY != null })
         assertTrue(chart.periodStartY.isFinite())
     }
 

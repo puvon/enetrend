@@ -70,6 +70,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
             }
         }
         Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
+        Text("期間累積の破線：補間由来の推定、または欠測日を除いた参考累積。詳細で区別します。", style = MaterialTheme.typography.labelSmall)
         Text("日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）／0は中立色", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -149,8 +150,9 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                         }
                     } }
                 }
-                line(cumulativeColor, { it.periodCumulativeY },
-                    { it.periodCumulative?.isEstimated == true || chart.baseline?.source is DisplayValue.Interpolated }, origin = true)
+                if (chart.hasPeriodCumulative) line(cumulativeColor, { it.periodCumulativeY },
+                    { it.periodCumulative?.isEstimated == true || it.periodCumulative?.isComplete == false ||
+                        chart.baseline?.source is DisplayValue.Interpolated }, origin = true)
                 line(weightColor, { it.weightY }, { it.weight?.display is DisplayValue.Interpolated })
                 line(averageColor, { it.movingAverageY }, { it.weight?.movingAverage?.hasInsufficientDays == true }, dotted = true, markers = false)
             }
@@ -162,15 +164,17 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         val last = chart.range.endDateExclusive.minusDays(1)
         Text("${last.monthValue}/${last.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
     }
-    Text("期間開始（${chart.range.startDate}）：0.0 kcal", style = MaterialTheme.typography.labelMedium)
-    chart.baseline?.let {
-        Text("累積0の基準：${it.date} ${String.format(Locale.JAPAN, "%.1f", it.kilograms)} kg${if (it.source is DisplayValue.Interpolated) "（補間）" else "（実測）"}", style = MaterialTheme.typography.labelSmall)
-        Text("期間累積は右軸の1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
-    } ?: run {
-        val scale = requireNotNull(chart.independentPeriodCumulativeScale)
-        Text("期間累積は独立スケール（体重との連動なし）", style = MaterialTheme.typography.labelMedium)
-        Text("期間累積の範囲：${String.format(Locale.JAPAN, "%.1f ～ %.1f kcal", scale.min, scale.max)}", style = MaterialTheme.typography.labelSmall)
-    }
+    if (chart.hasPeriodCumulative) {
+        Text("期間開始（${chart.range.startDate}）：0.0 kcal", style = MaterialTheme.typography.labelMedium)
+        chart.baseline?.let {
+            Text("累積0の基準：${it.date} ${String.format(Locale.JAPAN, "%.1f", it.kilograms)} kg${if (it.source is DisplayValue.Interpolated) "（補間）" else "（実測）"}", style = MaterialTheme.typography.labelSmall)
+            Text("期間累積は右軸の1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
+        } ?: run {
+            val scale = requireNotNull(chart.independentPeriodCumulativeScale)
+            Text("期間累積は独立スケール（体重との連動なし）", style = MaterialTheme.typography.labelMedium)
+            Text("期間累積の範囲：${String.format(Locale.JAPAN, "%.1f ～ %.1f kcal", scale.min, scale.max)}", style = MaterialTheme.typography.labelSmall)
+        }
+    } else Text("期間累積収支：算出できる日がありません。", style = MaterialTheme.typography.labelMedium)
 }
 
 @Composable

@@ -105,6 +105,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     if (data.historyLimited) Text("表示期間前のデータへのアクセスが制限されています。開始付近の平均・補間は利用できる記録だけに基づきます。")
     if (!data.hasData) {
         Text("この期間に表示できるデータがありません。")
+        Text("期間累積収支：算出できる日がありません。")
         Text("表示期間を変更するか、記録元のアプリと Health Connect の連携を確認してください。")
         controls()
         return
@@ -122,7 +123,8 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     if (data.weights.any { it.movingAverage.hasInsufficientDays })
         Text("移動平均の実測日数が不足する日があります。選択日の詳細で計算に使った日数を確認できます。")
     Text("表示期間の開始を0 kcalとして計算します。期間を変えると、同じ日の期間累積収支も変わります。")
-    if (data.balances.periodCumulative.any { !it.isComplete }) Text("欠測日以降の期間累積収支は未算出です。詳細の小計は算出できた日のみです。")
+    if (chart.hasPeriodCumulative && data.balances.periodCumulative.any { !it.isComplete })
+        Text("欠測日以降は欠測日を除いた参考累積です。欠測日の実際の収支や誤差を推定した値ではありません。")
     Text("グラフのタップまたはスライダーで日付を選択")
     Slider(value = selected.toFloat(), onValueChange = { onSelectedDate(days[it.roundToInt().coerceIn(0, days.lastIndex)].date.toString()) },
         valueRange = 0f..days.lastIndex.coerceAtLeast(1).toFloat(), steps = (days.size - 2).coerceAtLeast(0), enabled = days.size > 1,
@@ -133,7 +135,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     days[selected].detailLines().forEachIndexed { index, line ->
         Text(line, style = if (index == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge)
     }
-    Text("今日の記録は途中です。記録がある日も記録漏れがないとは限りません。欠測は線でつなぎません。移動平均は取得できた実測値のみを使用します。")
+    Text("今日の記録は途中です。記録がある日も記録漏れがないとは限りません。参考累積は欠測日も前日値を維持します。体重・移動平均の欠測は線でつなぎません。移動平均は取得できた実測値のみを使用します。")
 }
 
 @Composable

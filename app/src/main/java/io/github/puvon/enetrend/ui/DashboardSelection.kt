@@ -17,8 +17,8 @@ internal fun DashboardChartDay.detailLines(): List<String> = buildList {
     add("摂取：${daily?.source?.intake.label("kcal")}／消費：${daily?.source?.burned.label("kcal")}")
     add("日別収支：${daily?.kilocalories.formatted("kcal")}${if (daily?.isEstimated == true) "（推定）" else ""}")
     add("期間累積収支：${periodCumulative?.kilocalories.formatted("kcal")}${if (periodCumulative?.isEstimated == true) "（推定を含む）" else ""}")
-    periodCumulative?.takeUnless { it.isComplete }?.let {
-        add("算出可能日の小計：${it.availableDaysSubtotalKilocalories.formatted("kcal")}（不完全・欠測${it.missingDates.size}日${if (it.isEstimated) "・推定を含む" else ""}）")
+    periodCumulative?.takeIf { !it.isComplete && it.kilocalories != null }?.let {
+        add("欠測日を除いた参考累積（不完全・欠測${it.missingDates.size}日を除外）")
     }
     add("体重：${weight?.display.label("kg")}")
     weight?.movingAverage?.let {

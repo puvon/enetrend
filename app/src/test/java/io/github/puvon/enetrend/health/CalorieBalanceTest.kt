@@ -27,9 +27,9 @@ class CalorieBalanceTest {
         assertTrue(result.periodCumulative.all { it.kilocalories == null && it.availableDaysSubtotalKilocalories == null })
     }
 
-    @Test fun gapInvalidatesCumulativeButKeepsExplicitSubtotal() {
+    @Test fun gapContinuesReferenceCumulativeAndKeepsMissingDates() {
         val result = CalorieBalanceCalculator.calculate(data(100.0 to 200.0, null to 200.0, 400.0 to 200.0))
-        assertEquals(listOf(-100.0, null, null), result.periodCumulative.map { it.kilocalories })
+        assertEquals(listOf(-100.0, -100.0, 100.0), result.periodCumulative.map { it.kilocalories })
         assertEquals(listOf(-100.0, -100.0, 100.0), result.periodCumulative.map { it.availableDaysSubtotalKilocalories })
         assertEquals(emptySet<LocalDate>(), result.periodCumulative.first().missingDates)
         assertEquals(setOf(start.plusDays(1)), result.periodCumulative.last().missingDates)
@@ -42,6 +42,41 @@ class CalorieBalanceTest {
         assertEquals(DisplayValue.Interpolated(200.0, start, start.plusDays(2)), result.daily[1].source.burned)
         assertEquals(setOf(start.plusDays(1)), result.periodCumulative.last().estimatedDates)
         assertTrue(result.periodCumulative.last().isComplete)
+    }
+
+    @Test fun agreedReferenceExampleAndMissingDailyValue() {
+        val result = CalorieBalanceCalculator.calculate(data(0.0 to 300.0, null to 500.0, 200.0 to 0.0, 0.0 to 400.0))
+        assertEquals(listOf(-300.0, null, 200.0, -400.0), result.daily.map { it.kilocalories })
+        assertEquals(listOf(-300.0, -300.0, -100.0, -500.0), result.periodCumulative.map { it.kilocalories })
+        assertEquals(listOf(0, 1, 1, 1), result.periodCumulative.map { it.missingDates.size })
+        assertTrue(result.periodCumulative.none { it.isEstimated })
+    }
+
+    @Test fun leadingConsecutiveAndTrailingMissingDaysKeepReferenceZero() {
+        val result = CalorieBalanceCalculator.calculate(data(null to 200.0, 200.0 to null, 200.0 to 200.0, null to null),
+            policy = InterpolationPolicy(0))
+        assertEquals(listOf(null, null, 0.0, null), result.daily.map { it.kilocalories })
+        assertEquals(listOf(0.0, 0.0, 0.0, 0.0), result.periodCumulative.map { it.kilocalories })
+        assertEquals(listOf(1, 2, 2, 3), result.periodCumulative.map { it.missingDates.size })
+        val onlyMissing = CalorieBalanceCalculator.calculate(data(null to 200.0))
+        assertNull(onlyMissing.periodCumulative.single().kilocalories)
+    }
+
+    @Test fun refillAndRangeChangeRecomputeCompletenessWithoutLosingEstimates() {
+        val original = data(300.0 to 100.0, 300.0 to null, null to 300.0, 300.0 to 300.0)
+        val before = CalorieBalanceCalculator.calculate(original)
+        assertEquals(300.0, before.periodCumulative.last().kilocalories!!, 0.0)
+        assertFalse(before.periodCumulative.last().isComplete)
+        assertTrue(before.periodCumulative.last().isEstimated)
+        val filled = CalorieBalanceCalculator.calculate(data(300.0 to 100.0, 300.0 to null, 400.0 to 300.0, 300.0 to 300.0))
+        assertEquals(400.0, filled.periodCumulative.last().kilocalories!!, 0.0)
+        assertTrue(filled.periodCumulative.last().isComplete)
+        assertTrue(filled.periodCumulative.last().isEstimated)
+        val selected = CalorieBalanceCalculator.calculate(original,
+            HealthDataRange(start.plusDays(3), start.plusDays(4), original.range.zoneId))
+        assertEquals(0.0, selected.periodCumulative.single().kilocalories!!, 0.0)
+        assertTrue(selected.periodCumulative.single().isComplete)
+        assertFalse(selected.periodCumulative.single().isEstimated)
     }
 
     @Test fun estimateDoesNotMakeMissingIntakeComputable() {

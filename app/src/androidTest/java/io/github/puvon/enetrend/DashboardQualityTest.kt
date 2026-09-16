@@ -90,9 +90,9 @@ class DashboardQualityTest {
         compose.onNodeWithContentDescription("詳細を表示する日付").performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(4f) }
         assertTrue(summary().contains("摂取：欠測"))
-        assertTrue(summary().contains("期間累積収支：未算出"))
+        assertTrue(summary().contains("期間累積収支：-800.0 kcal"))
         assertTrue(summary().contains("体重：欠測"))
-        assertTrue(summary().contains("算出可能日の小計："))
+        assertTrue(summary().contains("欠測1日を除外"))
     }
 
     @Test fun enlargedTextAndLargeCumulativeKeepAxisLabelsAndControlsReadable() {

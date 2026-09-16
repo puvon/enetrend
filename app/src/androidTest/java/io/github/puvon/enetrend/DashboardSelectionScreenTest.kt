@@ -55,7 +55,7 @@ class DashboardSelectionScreenTest {
         plot().performScrollTo().performTouchInput { click(center) }
         assertTrue(description().contains("2026-09-02。"))
         assertTrue(description().contains("摂取：欠測"))
-        assertTrue(description().contains("期間累積収支：未算出"))
+        assertTrue(description().contains("期間累積収支：-100.0 kcal"))
         assertTrue(description().contains("体重：71.0 kg（補間："))
         compose.onNodeWithText("体重：71.0 kg（補間：", substring = true).performScrollTo().assertIsDisplayed()
         slider().performScrollTo().performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }

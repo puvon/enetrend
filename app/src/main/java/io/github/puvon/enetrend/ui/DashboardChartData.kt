@@ -51,6 +51,7 @@ data class DashboardChartData(
     val periodStartY: Double,
 ) {
     val periodStartX: Double get() = 0.0
+    val hasPeriodCumulative: Boolean get() = days.any { it.periodCumulativeY != null }
     val isPeriodCumulativeWeightLinked: Boolean get() = baseline != null
 }
 

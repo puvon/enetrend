@@ -12,7 +12,8 @@ data class DailyCalorieBalance(
 }
 
 /** Sum from startDate through date, inclusive. Completeness describes available daily balances,
- * not completeness of source logging. The origin is before adding the first day's balance. */
+ * not completeness of source logging. Missing days contribute nothing, without inventing a
+ * daily zero. Values are null only when the entire selected range has no computable balance. */
 data class PeriodCumulativeCalorieBalance(
     val date: LocalDate,
     val startDate: LocalDate,
@@ -56,6 +57,7 @@ object CalorieBalanceCalculator {
             .filter { it.date >= range.startDate && it.date < range.endDateExclusive }
             .map(::daily)
         val missing = linkedSetOf<LocalDate>()
+        val hasComputableDay = daily.any { it.kilocalories != null }
         val estimated = linkedSetOf<LocalDate>()
         // Compensated summation reduces accumulated floating-point rounding error.
         var sum = 0.0
@@ -76,7 +78,7 @@ object CalorieBalanceCalculator {
             }
             PeriodCumulativeCalorieBalance(
                 day.date, range.startDate,
-                sum.takeIf { missing.isEmpty() && count > 0 },
+                sum.takeIf { hasComputableDay },
                 sum.takeIf { count > 0 },
                 missing.toSet(), estimated.toSet(),
             )

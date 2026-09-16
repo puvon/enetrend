@@ -24,6 +24,36 @@ import org.junit.Test
 class DashboardScreenTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun allMissingBalancesPaintNoCumulativeOriginAndRefillRestoresIt() {
+        val start = LocalDate.of(2026, 9, 1)
+        val range = HealthDataRange(start, start.plusDays(3), ZoneId.of("Asia/Tokyo"))
+        var filled by mutableStateOf(false)
+        var cumulativeColor = Color.Transparent
+        compose.setContent { EnetrendTheme {
+            cumulativeColor = MaterialTheme.colorScheme.tertiary
+            val calories = DailyCalorieData(range, range.days().associate {
+                it.date to CalorieTotals(if (filled) 200.0 else null, 200.0)
+            })
+            val data = DashboardData(CalorieBalanceCalculator.calculate(calories),
+                WeightTrendCalculator.calculate(emptyList(), range), false)
+            DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
+        } }
+        val plot = compose.onNodeWithContentDescription("統合グラフ。", substring = true)
+        val pixels = plot.performScrollTo().captureToImage().toPixelMap()
+        var count = 0
+        for (y in 0 until pixels.height) for (x in 0 until pixels.width) {
+            val p = pixels[x, y]
+            if (kotlin.math.abs(p.red - cumulativeColor.red) < 0.02 && kotlin.math.abs(p.green - cumulativeColor.green) < 0.02 && kotlin.math.abs(p.blue - cumulativeColor.blue) < 0.02) count++
+        }
+        assertEquals("No cumulative line or zero origin for an entirely missing period", 0, count)
+        compose.onNodeWithText("期間累積収支：算出できる日がありません。").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（", substring = true).assertDoesNotExist()
+        compose.runOnIdle { filled = true }
+        compose.onNodeWithText("期間累積収支：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("期間開始（2026-09-01）：0.0 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("欠測日を除いた参考累積", substring = true).assertDoesNotExist()
+    }
+
     @Test fun singlePlotDrawsAllLinesAndPrecedesPeriodControls() {
         val start = LocalDate.of(2026, 9, 1)
         val range = HealthDataRange(start, start.plusDays(7), ZoneId.of("Asia/Tokyo"))
@@ -60,7 +90,7 @@ class DashboardScreenTest {
         compose.onNodeWithText("体重 kg").performScrollTo().assertIsDisplayed()
     }
 
-    @Test fun cumulativeLineDoesNotContinueAfterMissingDay() {
+    @Test fun referenceCumulativeContinuesAfterMissingDay() {
         val start = LocalDate.of(2026, 9, 1)
         val range = HealthDataRange(start, start.plusDays(3), ZoneId.of("Asia/Tokyo"))
         val calories = DailyCalorieData(range, mapOf(start to CalorieTotals(100.0, 200.0),
@@ -79,8 +109,8 @@ class DashboardScreenTest {
             val p = pixels[x, y]
             if (kotlin.math.abs(p.red - cumulativeColor.red) < 0.02 && kotlin.math.abs(p.green - cumulativeColor.green) < 0.02 && kotlin.math.abs(p.blue - cumulativeColor.blue) < 0.02) coloredPixels++
         }
-        assertEquals("Missing cumulative values must not be replaced by the subtotal", 0, coloredPixels)
-        compose.onNodeWithText("期間累積収支：未算出").performScrollTo().assertIsDisplayed()
+        assertTrue("Reference cumulative must continue after missing days", coloredPixels > 20)
+        compose.onNodeWithText("欠測日を除いた参考累積（不完全・欠測", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test fun changingDisplayPeriodUpdatesOriginAndDisplayedTotal() {
@@ -144,10 +174,10 @@ class DashboardScreenTest {
         compose.onNodeWithText("■ 日別カロリー収支").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("━ 期間累積収支").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("期間累積収支：未算出").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("欠測日を除いた参考累積（不完全・欠測", substring = true).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("期間累積は独立スケール（体重との連動なし）").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("日別収支：-200.0 kcal").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("算出可能日の小計：", substring = true).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("算出可能日の小計：", substring = true).assertDoesNotExist()
         compose.onNodeWithText("体重：欠測").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("凡例を閉じる").performScrollTo().performClick()
         compose.onNodeWithText("■ 日別カロリー収支").assertDoesNotExist()
