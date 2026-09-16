@@ -132,9 +132,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
             contentDescription = "詳細を表示する日付"
             stateDescription = days[selected].date.toString()
         })
-    days[selected].detailLines().forEachIndexed { index, line ->
-        Text(line, style = if (index == 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge)
-    }
+    DashboardDetails(days[selected])
     Text("今日の記録は途中です。記録がある日も記録漏れがないとは限りません。参考累積は欠測日も前日値を維持します。体重・移動平均の欠測は線でつなぎません。移動平均は取得できた実測値のみを使用します。")
 }
 
