@@ -84,6 +84,36 @@ class DailyCalorieReadTest {
         assertEquals(HealthDataResult.AccessDenied, HealthDataRepository(source).readDailyCalories(range))
     }
 
+    @Test fun optionalHistoryDistinguishesRestrictedEmptyAndZeroWithoutRetry() = runBlocking {
+        val source = Source().apply {
+            read = {
+                when (it.startDate) {
+                    date -> throw SecurityException()
+                    date.plusDays(1) -> CalorieTotals(null, null)
+                    else -> CalorieTotals(0.0, 0.0)
+                }
+            }
+        }
+        val data = (HealthDataRepository(source).readDailyCalories(range, date.plusDays(1)) as DailyCaloriesResult.Available).data
+        assertEquals(setOf(date), data.accessRestrictedDates)
+        assertFalse(data.recorded.containsKey(date))
+        assertEquals(CalorieTotals(null, null), data.recorded[date.plusDays(1)])
+        assertEquals(CalorieTotals(0.0, 0.0), data.recorded[date.plusDays(2)])
+        assertEquals(3, source.requests.size)
+        val cropped = data.within(HealthDataRange(date, date.plusDays(2), range.zoneId))
+        assertEquals(setOf(date), cropped.accessRestrictedDates)
+        assertEquals(setOf(date.plusDays(1)), cropped.recorded.keys)
+    }
+
+    @Test fun optionalHistoryDoesNotHidePermissionRevocationOrOtherFailures() = runBlocking {
+        val source = Source().apply { read = { grants = emptySet(); throw SecurityException() } }
+        assertEquals(HealthDataResult.PermissionsRequired(source.requiredPermissions),
+            HealthDataRepository(source).readDailyCalories(range, date.plusDays(1)))
+        source.grants = source.requiredPermissions
+        source.read = { throw IOException() }
+        assertEquals(HealthDataResult.Error, HealthDataRepository(source).readDailyCalories(range, date.plusDays(1)))
+    }
+
     @Test fun providerLostAfterFirstDayDiscardsSeriesAndStopsReading() = runBlocking {
         val source = Source()
         source.read = { source.status = HealthAvailability.UNAVAILABLE; CalorieTotals(100.0, 200.0) }

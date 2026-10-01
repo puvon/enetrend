@@ -139,7 +139,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun PeriodControls(displayDays: Int, averagePeriod: MovingAveragePeriod, onDisplayDays: (Int) -> Unit, onAveragePeriod: (MovingAveragePeriod) -> Unit) {
-    Text("表示期間（今日まで）")
+    Text("表示期間")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(7, 14, 30).forEach { days ->
             FilterChip(selected = days == displayDays, onClick = { onDisplayDays(days) },

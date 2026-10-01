@@ -40,7 +40,9 @@ data class CalorieTotals(
     val intakeKilocalories: Double?,
     val burnedKilocalories: Double?,
     val dataOrigins: Set<String> = emptySet(),
-)
+) {
+    val hasPositiveIntake: Boolean get() = (intakeKilocalories ?: 0.0) > 0.0
+}
 
 /** A measurement, not a daily representative value. Its recorded offset may be absent. */
 data class WeightMeasurement(
@@ -53,6 +55,10 @@ data class WeightMeasurement(
 )
 
 data class WeightPage(val measurements: List<WeightMeasurement>, val nextPageToken: String?)
+
+sealed interface WeightDataResult {
+    data class Available(val measurements: List<WeightMeasurement>) : WeightDataResult
+}
 
 data class HealthData(
     val range: HealthDataRange,

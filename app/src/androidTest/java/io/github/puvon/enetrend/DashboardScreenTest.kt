@@ -85,7 +85,7 @@ class DashboardScreenTest {
             assertTrue("Bars and each line must be painted inside the same plot", count > 20)
         }
         val plotTop = plot.fetchSemanticsNode().positionInRoot.y
-        val controlsTop = compose.onNodeWithText("表示期間（今日まで）").fetchSemanticsNode().positionInRoot.y
+        val controlsTop = compose.onNodeWithText("表示期間").fetchSemanticsNode().positionInRoot.y
         assertTrue(plotTop < controlsTop)
         compose.onNodeWithText("体重 kg").performScrollTo().assertIsDisplayed()
     }

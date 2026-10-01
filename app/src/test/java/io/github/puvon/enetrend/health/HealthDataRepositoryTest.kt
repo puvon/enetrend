@@ -127,6 +127,18 @@ class HealthDataRepositoryTest {
         assertEquals(listOf(null, "next"), source.tokens)
     }
 
+    @Test fun weightsOnlyReadDoesNotRequestCaloriesAndKeepsPagingAndDeduplication() = runBlocking {
+        val source = Source()
+        val original = weight("one")
+        val updated = original.copy(kilograms = 66.0, lastModifiedTime = Instant.EPOCH.plusSeconds(1))
+        source.pages = mapOf(null to WeightPage(listOf(original), "next"),
+            "next" to WeightPage(listOf(updated, weight("two"), weight("outside", range.endTime)), null))
+        val result = HealthDataRepository(source).readWeights(range) as WeightDataResult.Available
+        assertEquals(listOf(updated, weight("two")), result.measurements)
+        assertEquals(listOf(null, "next"), source.tokens)
+        assertEquals(0, source.calorieCalls)
+    }
+
     @Test fun repeatedPageTokenReturnsErrorInsteadOfLoopingOrReturningPartialData() = runBlocking {
         val source = Source()
         source.pages = mapOf(null to WeightPage(listOf(weight("one")), "next"), "next" to WeightPage(emptyList(), "next"))

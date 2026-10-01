@@ -68,8 +68,19 @@ data class DailyCalorieDisplay(
 data class DailyCalorieData(
     val range: HealthDataRange,
     val recorded: Map<LocalDate, CalorieTotals>,
+    val accessRestrictedDates: Set<LocalDate> = emptySet(),
 ) {
-    init { require(recorded.keys.all { it >= range.startDate && it < range.endDateExclusive }) }
+    init {
+        require((recorded.keys + accessRestrictedDates).all { it >= range.startDate && it < range.endDateExclusive })
+        require(recorded.keys.intersect(accessRestrictedDates).isEmpty())
+    }
+
+    fun within(selected: HealthDataRange): DailyCalorieData {
+        require(selected.zoneId == range.zoneId)
+        require(selected.startDate >= range.startDate && selected.endDateExclusive <= range.endDateExclusive)
+        fun includes(date: LocalDate) = date >= selected.startDate && date < selected.endDateExclusive
+        return DailyCalorieData(selected, recorded.filterKeys(::includes), accessRestrictedDates.filter(::includes).toSet())
+    }
 
     val hasRecordedData: Boolean get() = recorded.values.any {
         it.intakeKilocalories != null || it.burnedKilocalories != null
@@ -95,4 +106,4 @@ sealed interface DailyCaloriesResult {
 }
 
 /** Access failures are shared by period reads and daily reads. */
-sealed interface HealthReadFailure : HealthDataResult, DailyCaloriesResult
+sealed interface HealthReadFailure : HealthDataResult, DailyCaloriesResult, WeightDataResult

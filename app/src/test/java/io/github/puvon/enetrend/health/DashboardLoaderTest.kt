@@ -3,9 +3,15 @@ package io.github.puvon.enetrend.health
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.Instant
+import java.time.Clock
+import java.time.Duration
+import java.time.ZoneOffset
 import io.github.puvon.enetrend.ui.DashboardChartProjector
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -16,6 +22,8 @@ class DashboardLoaderTest {
         override val requiredPermissions = setOf("read")
         var granted = requiredPermissions
         val ranges = mutableListOf<HealthDataRange>()
+        val weightRanges = mutableListOf<HealthDataRange>()
+        var onWeightRead: suspend (HealthDataRange) -> Unit = {}
         var read: (HealthDataRange) -> CalorieTotals = { CalorieTotals(2000.0, 2200.0) }
         var weights = emptyList<WeightMeasurement>()
         override fun availability() = HealthAvailability.AVAILABLE
@@ -24,8 +32,11 @@ class DashboardLoaderTest {
             ranges.add(range)
             return read(range)
         }
-        override suspend fun readWeightPage(range: HealthDataRange, pageToken: String?) = WeightPage(
-            weights.filter { it.time >= range.startTime && it.time < range.endTime }, null)
+        override suspend fun readWeightPage(range: HealthDataRange, pageToken: String?): WeightPage {
+            weightRanges.add(range)
+            onWeightRead(range)
+            return WeightPage(weights.filter { it.time >= range.startTime && it.time < range.endTime }, null)
+        }
     }
 
     private fun populatedSource() = Source().apply {
@@ -70,19 +81,21 @@ class DashboardLoaderTest {
     @Test fun selectedRangeAndAverageContextAreIndependent() = runBlocking {
         val source = Source()
         val state = DashboardLoader(HealthDataRepository(source)).load(today, zone, 30, MovingAveragePeriod.THIRTY_DAYS) as DashboardState.Ready
-        assertEquals(today.minusDays(58), source.ranges.first().startDate)
+        assertEquals(today.minusDays(58), source.ranges.minOf { it.startDate })
         assertEquals(today.minusDays(29), state.data.balances.range.startDate)
         assertEquals(30, state.data.balances.daily.size)
         assertEquals(-6000.0, state.data.balances.periodCumulative.last().kilocalories!!, 0.0)
         assertFalse(state.data.historyLimited)
     }
 
-    @Test fun accessLimitedHistoryRetriesSelectedRangeAndMarksLimitation() = runBlocking {
+    @Test fun accessLimitedHistoryKeepsReadableDaysWithoutRepeatingCalorieQueries() = runBlocking {
         val source = Source()
         source.read = { if (it.startDate < today.minusDays(29)) throw SecurityException() else CalorieTotals(1.0, 2.0) }
         val state = DashboardLoader(HealthDataRepository(source)).load(today, zone, 30, MovingAveragePeriod.THIRTY_DAYS) as DashboardState.Ready
         assertTrue(state.data.historyLimited)
         assertEquals(30, state.data.weights.size)
+        assertEquals(source.ranges.size, source.ranges.distinct().size)
+        assertTrue(requireNotNull(state.data.today).previousSevenDays.accessRestrictedDates.isEmpty())
     }
 
     @Test fun noDataRemainsEmptyInsteadOfBecomingZero() = runBlocking {
@@ -102,6 +115,158 @@ class DashboardLoaderTest {
         val source = Source().apply { read = { granted = emptySet(); CalorieTotals(1.0, 2.0) } }
         val state = DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS)
         assertEquals(DashboardState.Failed(HealthDataResult.PermissionsRequired(setOf("read"))), state)
+    }
+
+    @Test fun todayZeroOrMissingEndsYesterdayButKeepsTodaysOriginalValues() = runBlocking {
+        for (intake in listOf(null, 0.0, 0.01)) {
+            val source = Source().apply {
+                read = { if (it.startDate == today) CalorieTotals(intake, 800.0) else CalorieTotals(2000.0, 2200.0) }
+            }
+            val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+            val status = requireNotNull(data.today)
+            val end = if (intake == 0.01) today.plusDays(1) else today
+            assertEquals(end, data.balances.range.endDateExclusive)
+            assertEquals(end.minusDays(7), data.balances.range.startDate)
+            assertEquals(end.minusDays(1), data.weights.last().date)
+            assertEquals(intake, status.calories.intakeKilocalories)
+            assertEquals(800.0, status.calories.burnedKilocalories)
+            assertEquals(intake == 0.01, status.includesTodayInTrend)
+            assertEquals(source.ranges.size, source.ranges.distinct().size)
+            assertTrue(source.ranges.all { it.endDateExclusive == it.startDate.plusDays(1) })
+        }
+    }
+
+    @Test fun sevenDayInputsAreIndependentOfDisplayAndAverageAndExcludeToday() = runBlocking {
+        val fixed = Clock.fixed(Instant.parse("2026-09-14T03:00:00Z"), ZoneOffset.UTC)
+        val source = Source().apply {
+            read = { CalorieTotals(it.startDate.dayOfMonth.toDouble(), 2000.0) }
+        }
+        val loader = DashboardLoader(HealthDataRepository(source), fixed)
+        val short = (loader.load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        val long = (loader.load(today, zone, 30, MovingAveragePeriod.THIRTY_DAYS) as DashboardState.Ready).data
+        assertEquals(short.today, long.today)
+        val status = requireNotNull(short.today)
+        assertEquals(fixed.instant(), status.readStartedAt)
+        assertEquals(today.minusDays(7), status.previousSevenDays.range.startDate)
+        assertEquals(today, status.previousSevenDays.range.endDateExclusive)
+        assertEquals((7..13).map(Int::toDouble), status.previousSevenDays.recorded.values.map { it.intakeKilocalories })
+    }
+
+    @Test fun restrictionOnSeventhPreviousDayIsNotSilentlyDroppedByShortDisplay() = runBlocking {
+        val source = Source().apply {
+            read = {
+                if (it.startDate < today.minusDays(6)) throw SecurityException()
+                if (it.startDate == today.minusDays(3)) CalorieTotals(null, null) else CalorieTotals(0.0, 0.0)
+            }
+        }
+        // Positive intake today selects a seven-day trend that starts only six days ago.
+        val earlierRead = source.read
+        source.read = { if (it.startDate == today) CalorieTotals(1.0, 0.0) else earlierRead(it) }
+        val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        val past = requireNotNull(data.today).previousSevenDays
+        assertEquals(setOf(today.minusDays(7)), past.accessRestrictedDates)
+        assertFalse(past.recorded.containsKey(today.minusDays(7)))
+        assertEquals(CalorieTotals(null, null), past.recorded[today.minusDays(3)])
+        assertEquals(CalorieTotals(0.0, 0.0), past.recorded[today.minusDays(2)])
+        assertEquals(6, past.recorded.size)
+        assertTrue(data.historyLimited)
+        assertEquals(source.ranges.size, source.ranges.distinct().size)
+    }
+
+    @Test fun trendCanBeEmptyWhileTodayHasConsumption() = runBlocking {
+        val source = Source().apply {
+            read = { if (it.startDate == today) CalorieTotals(null, 900.0) else CalorieTotals(null, null) }
+        }
+        val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        assertFalse(data.hasData)
+        assertTrue(requireNotNull(data.today).hasData)
+        assertFalse(requireNotNull(data.today).previousSevenDays.hasRecordedData)
+        assertTrue(data.balances.daily.all { it.kilocalories == null })
+    }
+
+    @Test fun excludedTodayCannotInterpolateYesterdaysConsumptionOrWeight() = runBlocking {
+        val source = populatedSource().apply {
+            weights = weights.filter { it.time.atZone(zone).toLocalDate() != today.minusDays(1) }
+            read = {
+                when (it.startDate) {
+                    today -> CalorieTotals(null, 800.0)
+                    today.minusDays(1) -> CalorieTotals(1800.0, null)
+                    else -> CalorieTotals(1800.0, 2200.0)
+                }
+            }
+        }
+        val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        assertEquals(DisplayValue.Missing, data.balances.daily.last().source.burned)
+        assertEquals(DisplayValue.Missing, data.weights.last().display)
+        assertTrue(source.weightRanges.all { it.endDateExclusive == today })
+        assertNull(requireNotNull(data.today).previousSevenDays.recorded.getValue(today.minusDays(1)).burnedKilocalories)
+    }
+
+    @Test fun weightHistoryFallbackDoesNotRereadOrTrimSevenDayCalories() = runBlocking {
+        val source = Source().apply {
+            onWeightRead = { if (it.startDate < today.minusDays(6)) throw SecurityException() }
+        }
+        val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        assertEquals(2, source.weightRanges.size)
+        assertEquals(data.balances.range, source.weightRanges.last())
+        assertEquals(7, requireNotNull(data.today).previousSevenDays.recorded.size)
+        assertEquals(source.ranges.size, source.ranges.distinct().size)
+        assertTrue(data.historyLimited)
+    }
+
+    @Test fun requiredRangeRestrictionAndLateFailuresDoNotExposeTodayOnlySuccess() = runBlocking {
+        for (failure in listOf(SecurityException(), IllegalStateException())) {
+            val source = Source().apply {
+                read = { if (it.startDate == today.minusDays(1)) throw failure else CalorieTotals(1.0, 2.0) }
+            }
+            val state = DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS)
+            val reason = if (failure is SecurityException) HealthDataResult.AccessDenied else HealthDataResult.Error
+            assertEquals(DashboardState.Failed(reason), state)
+            assertTrue(source.weightRanges.isEmpty())
+        }
+    }
+
+    @Test fun missingPermissionsAndLateRevocationDoNotExposeSnapshot() = runBlocking {
+        val source = Source().apply { granted = emptySet() }
+        val loader = DashboardLoader(HealthDataRepository(source))
+        assertTrue(loader.load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) is DashboardState.Failed)
+        assertTrue(source.ranges.isEmpty())
+        source.granted = source.requiredPermissions
+        source.onWeightRead = { source.granted = emptySet(); throw SecurityException() }
+        assertEquals(DashboardState.Failed(HealthDataResult.PermissionsRequired(setOf("read"))),
+            loader.load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS))
+        assertEquals(1, source.weightRanges.size)
+    }
+
+    @Test fun cancelledOlderReadCannotReturnTodaysOldSnapshot() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val source = Source().apply { onWeightRead = { entered.complete(Unit); release.await() } }
+        val loader = DashboardLoader(HealthDataRepository(source))
+        val older = async { loader.load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) }
+        entered.await()
+        older.cancelAndJoin()
+        source.onWeightRead = {}
+        source.read = { CalorieTotals(3000.0, 2300.0) }
+        val latest = loader.load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready
+        release.complete(Unit)
+        assertTrue(older.isCancelled)
+        assertEquals(3000.0, requireNotNull(latest.data.today).calories.intakeKilocalories)
+    }
+
+    @Test fun todayReadCoversWholeLocalDayIncludingDaylightSavingBoundary() = runBlocking {
+        val date = LocalDate.of(2026, 3, 8)
+        val dstZone = ZoneId.of("America/New_York")
+        val readTime = date.atTime(12, 0).atZone(dstZone).toInstant()
+        val source = Source()
+        val data = (DashboardLoader(HealthDataRepository(source), Clock.fixed(readTime, ZoneOffset.UTC))
+            .load(date, dstZone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        val request = source.ranges.first()
+        assertEquals(date.atStartOfDay(dstZone).toInstant(), request.startTime)
+        assertEquals(date.plusDays(1).atStartOfDay(dstZone).toInstant(), request.endTime)
+        assertEquals(23L, Duration.between(request.startTime, request.endTime).toHours())
+        assertTrue(request.endTime > readTime)
+        assertEquals(readTime, requireNotNull(data.today).readStartedAt)
     }
 
     @Test(expected = CancellationException::class) fun cancellationPropagates() { runBlocking {

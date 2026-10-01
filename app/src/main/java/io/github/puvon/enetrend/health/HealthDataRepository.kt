@@ -3,23 +3,36 @@ package io.github.puvon.enetrend.health
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import java.time.LocalDate
 
 /** Foreground reads only. A failed page never produces a seemingly complete partial result. */
 class HealthDataRepository(private val source: HealthDataSource) {
-    suspend fun readDailyCalories(range: HealthDataRange): DailyCaloriesResult {
+    /** Older optional context may be inaccessible, but is never reported as an empty read. */
+    suspend fun readDailyCalories(
+        range: HealthDataRange,
+        requiredStartDate: LocalDate = range.startDate,
+    ): DailyCaloriesResult {
+        require(requiredStartDate >= range.startDate && requiredStartDate <= range.endDateExclusive)
         return try {
             checkAccess()?.let { return it }
-            val daily = linkedMapOf<java.time.LocalDate, CalorieTotals>()
+            val daily = linkedMapOf<LocalDate, CalorieTotals>()
+            val restricted = linkedSetOf<LocalDate>()
             for (day in range.days()) {
                 currentCoroutineContext().ensureActive()
                 if (day.isEmpty) continue
                 checkAccess()?.let { return it }
-                daily[day.date] = source.readCalorieTotals(
-                    HealthDataRange(day.date, day.date.plusDays(1), range.zoneId),
-                )
+                try {
+                    daily[day.date] = source.readCalorieTotals(
+                        HealthDataRange(day.date, day.date.plusDays(1), range.zoneId),
+                    )
+                } catch (_: SecurityException) {
+                    checkAccess()?.let { return it }
+                    if (day.date >= requiredStartDate) return HealthDataResult.AccessDenied
+                    restricted.add(day.date)
+                }
             }
             checkAccess()?.let { return it }
-            DailyCaloriesResult.Available(DailyCalorieData(range, daily))
+            DailyCaloriesResult.Available(DailyCalorieData(range, daily, restricted))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: SecurityException) {
@@ -34,6 +47,25 @@ class HealthDataRepository(private val source: HealthDataSource) {
         return try {
             checkAccess()?.let { return it }
             val calories = source.readCalorieTotals(range)
+            val weights = when (val result = readWeights(range)) {
+                is WeightDataResult.Available -> result.measurements
+                is HealthReadFailure -> return result
+            }
+            val data = HealthData(range, calories, weights)
+            if (data.isEmpty) HealthDataResult.Empty(range) else HealthDataResult.Available(data)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: SecurityException) {
+            HealthDataResult.AccessDenied
+        } catch (_: Exception) {
+            HealthDataResult.Error
+        }
+    }
+
+    /** Does not request calories again when the caller already has daily aggregates. */
+    suspend fun readWeights(range: HealthDataRange): WeightDataResult {
+        return try {
+            checkAccess()?.let { return it }
             val weights = linkedMapOf<String, WeightMeasurement>()
             val seenTokens = mutableSetOf<String>()
             var token: String? = null
@@ -55,16 +87,12 @@ class HealthDataRepository(private val source: HealthDataSource) {
             } while (token != null)
             // Do not expose collected data if access was revoked while the last request was running.
             checkAccess()?.let { return it }
-            val data = HealthData(
-                range, calories,
-                weights.values.sortedWith(compareBy(WeightMeasurement::time, WeightMeasurement::id)),
-            )
-            if (data.isEmpty) HealthDataResult.Empty(range) else HealthDataResult.Available(data)
+            WeightDataResult.Available(weights.values.sortedWith(compareBy(WeightMeasurement::time, WeightMeasurement::id)))
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: SecurityException) {
             // History restrictions can also throw SecurityException; do not claim data is empty.
-            HealthDataResult.AccessDenied
+            checkAccess() ?: HealthDataResult.AccessDenied
         } catch (_: Exception) {
             HealthDataResult.Error
         }
