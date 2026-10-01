@@ -42,14 +42,28 @@ class DashboardLoader(
     private val repository: HealthDataRepository,
     private val clock: Clock = Clock.systemUTC(),
 ) {
+    suspend fun loadCurrent(
+        displayDays: Int,
+        averagePeriod: MovingAveragePeriod,
+        timeSource: DashboardTimeSource,
+    ): DashboardState {
+        while (true) {
+            currentCoroutineContext().ensureActive()
+            val started = timeSource.now()
+            val result = load(started.date, started.zone, displayDays, averagePeriod, started.instant)
+            // A read can straddle midnight or a zone change even before its notification arrives.
+            if (started.hasSameDayAndZone(timeSource.now())) return result
+        }
+    }
+
     suspend fun load(
         today: LocalDate,
         zone: ZoneId,
         displayDays: Int,
         averagePeriod: MovingAveragePeriod,
+        readStartedAt: Instant = clock.instant(),
     ): DashboardState {
         require(displayDays in listOf(7, 14, 30))
-        val readStartedAt = clock.instant()
         // Use the entire local day: clipping at now could truncate a day-long nutrition record.
         val todayRange = HealthDataRange(today, today.plusDays(1), zone)
         val todayCalories = when (val result = repository.readDailyCalories(todayRange)) {

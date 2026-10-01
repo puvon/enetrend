@@ -46,6 +46,57 @@ class DashboardLoaderTest {
         }
     }
 
+    @Test fun midnightDuringReadDiscardsOldWindowAndUsesOneNewTimestamp() = runBlocking {
+        var instant = Instant.parse("2026-12-31T14:59:59Z")
+        val clock = object : Clock() {
+            override fun getZone(): ZoneId = this@DashboardLoaderTest.zone
+            override fun withZone(zone: ZoneId): Clock = Clock.fixed(instant, zone)
+            override fun instant() = instant
+        }
+        val source = Source().apply {
+            onWeightRead = { instant = Instant.parse("2026-12-31T15:00:01Z") }
+            read = { if (it.startDate.toString() == "2027-01-01") CalorieTotals(null, 10.0)
+                else CalorieTotals(2000.0, 2200.0) }
+        }
+        val data = (DashboardLoader(HealthDataRepository(source)).loadCurrent(7,
+            MovingAveragePeriod.SEVEN_DAYS, DashboardTimeSource(clock) { zone }) as DashboardState.Ready).data
+        assertEquals(2, source.weightRanges.size)
+        assertEquals("2027-01-01", data.today!!.date.toString())
+        assertEquals(instant, data.today.readStartedAt)
+        assertEquals(data.today.date, data.balances.range.endDateExclusive)
+        assertEquals(data.today.date, data.today.previousSevenDays.range.endDateExclusive)
+        assertEquals(data.today.date.minusDays(7), data.today.previousSevenDays.range.startDate)
+        assertEquals(10.0, data.today.calories.burnedKilocalories!!, 0.0)
+    }
+
+    @Test fun zoneChangeDuringReadRetriesAllWindowsEvenOnSameCalendarDay() = runBlocking {
+        var currentZone = zone
+        val instant = Instant.parse("2026-09-14T12:00:00Z")
+        val source = Source().apply { onWeightRead = { currentZone = ZoneId.of("Europe/London") } }
+        val data = (DashboardLoader(HealthDataRepository(source)).loadCurrent(7,
+            MovingAveragePeriod.SEVEN_DAYS,
+            DashboardTimeSource(Clock.fixed(instant, zone)) { currentZone }) as DashboardState.Ready).data
+        assertEquals(2, source.weightRanges.size)
+        assertEquals(currentZone, data.balances.range.zoneId)
+        assertEquals(currentZone, data.today!!.previousSevenDays.range.zoneId)
+        assertEquals(instant, data.today.readStartedAt)
+    }
+
+    @Test fun permissionRevocationAndRecoveryDoNotReuseEarlierCard() = runBlocking {
+        val source = Source()
+        val loader = DashboardLoader(HealthDataRepository(source))
+        val time = DashboardTimeSource(Clock.fixed(today.atStartOfDay(zone).toInstant(), zone)) { zone }
+        assertTrue(loader.loadCurrent(7, MovingAveragePeriod.SEVEN_DAYS, time) is DashboardState.Ready)
+        source.granted = emptySet()
+        assertTrue(loader.loadCurrent(7, MovingAveragePeriod.SEVEN_DAYS, time) is DashboardState.Failed)
+        source.granted = source.requiredPermissions
+        source.read = { CalorieTotals(null, 500.0) }
+        val recovered = (loader.loadCurrent(7, MovingAveragePeriod.SEVEN_DAYS, time) as DashboardState.Ready).data
+        assertNull(recovered.today!!.calories.intakeKilocalories)
+        assertEquals(today, recovered.balances.range.endDateExclusive)
+        assertEquals(500.0, recovered.today.calorieSummary.intakeAllowanceKilocalories!!, 0.0)
+    }
+
     @Test fun changingDisplayRangeAlignsAllSeriesAndReselectsBaseline() = runBlocking {
         val loader = DashboardLoader(HealthDataRepository(populatedSource()))
         for (length in listOf(30, 7, 14, 30)) {

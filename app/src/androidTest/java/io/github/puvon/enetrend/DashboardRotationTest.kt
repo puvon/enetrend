@@ -6,6 +6,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.lifecycle.Lifecycle
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -36,5 +37,22 @@ class DashboardRotationTest {
         } finally {
             compose.activityRule.scenario.onActivity { it.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
         }
+    }
+
+    @Test fun realActivityRetryAndResumeKeepSelectionAndRefreshTodayCard() {
+        waitForPlot()
+        compose.onNodeWithText("7日間").performScrollTo().performClick()
+        waitForPlot()
+        plot().performScrollTo().performTouchInput { click(Offset(1f, height / 2f)) }
+        val selection = plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].substringBefore("。")
+        compose.onNodeWithText("再確認").performScrollTo().performClick()
+        waitForPlot()
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].startsWith(selection))
+        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
+        waitForPlot()
+        compose.onNodeWithText("7日間").assertIsSelected()
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].startsWith(selection))
+        compose.onNodeWithText("今日の状況（${java.time.LocalDate.now()}）").assertExists()
     }
 }

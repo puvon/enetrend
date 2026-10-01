@@ -11,12 +11,17 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import io.github.puvon.enetrend.health.*
-import java.time.LocalDate
-import java.time.ZoneId
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.compose.ui.semantics.stateDescription
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
 @Composable
@@ -32,20 +37,39 @@ fun DashboardRoute(
     actionError: Boolean,
     snackbarHostState: SnackbarHostState,
     readVersion: Int = 0,
+    timeSource: DashboardTimeSource = remember { DashboardTimeSource() },
+    timeChanges: Flow<Unit> = rememberDashboardTimeChanges(),
 ) {
     // A new request gets its own state immediately; an old result cannot appear under new controls.
     var state: DashboardState by remember(loader, displayDays, averagePeriod, readVersion) { mutableStateOf(DashboardState.Loading) }
-    LaunchedEffect(loader, displayDays, averagePeriod, readVersion) {
-        state = DashboardState.Loading
-        state = try {
-            withContext(Dispatchers.IO) {
-                val zone = ZoneId.systemDefault()
-                loader.load(LocalDate.now(zone), zone, displayDays, averagePeriod)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(loader, displayDays, averagePeriod, readVersion, timeSource, timeChanges, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            try {
+                timeChanges.collectLatest {
+                    while (isActive) {
+                        state = DashboardState.Loading
+                        val result = try {
+                            withContext(Dispatchers.IO) {
+                                loader.loadCurrent(displayDays, averagePeriod, timeSource)
+                            }
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: Exception) {
+                            DashboardState.Failed(HealthDataResult.Error)
+                        }
+                        val now = timeSource.now()
+                        if (result is DashboardState.Ready && result.data.today?.let {
+                            it.date != now.date || it.previousSevenDays.range.zoneId != now.zone
+                        } == true) continue
+                        state = result
+                        // Use the next local day boundary, not a fixed 24-hour interval (DST).
+                        delay(now.millisUntilNextDay)
+                    }
+                }
+            } finally {
+                state = DashboardState.Loading
             }
-        } catch (cancelled: CancellationException) {
-            throw cancelled
-        } catch (_: Exception) {
-            DashboardState.Failed(HealthDataResult.Error)
         }
     }
     DashboardScreen(state, displayDays, averagePeriod, onDisplayDays, onAveragePeriod,

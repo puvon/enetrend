@@ -11,6 +11,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.material3.SnackbarHostState
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
@@ -47,20 +48,23 @@ class MainActivity : ComponentActivity() {
             EnetrendTheme {
                 var displayDays by rememberSaveable { mutableStateOf(30) }
                 var averageDays by rememberSaveable { mutableStateOf(7) }
+                val dashboardState = rememberSaveableStateHolder()
                 if (state == HealthConnectionState.Ready) {
-                    DashboardRoute(
-                        loader = dashboardLoader,
-                        displayDays = displayDays,
-                        averagePeriod = MovingAveragePeriod.entries.first { it.days == averageDays },
-                        onDisplayDays = { displayDays = it },
-                        onAveragePeriod = { averageDays = it.days },
-                        onRetry = { refresh(notifyResult = true) },
-                        onSettings = { openExternal(Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)) },
-                        onPrivacy = { startActivity(Intent(this, PermissionsRationaleActivity::class.java)) },
-                        actionError = actionError,
-                        snackbarHostState = snackbarHostState,
-                        readVersion = readVersion,
-                    )
+                    dashboardState.SaveableStateProvider("dashboard") {
+                        DashboardRoute(
+                            loader = dashboardLoader,
+                            displayDays = displayDays,
+                            averagePeriod = MovingAveragePeriod.entries.first { it.days == averageDays },
+                            onDisplayDays = { displayDays = it },
+                            onAveragePeriod = { averageDays = it.days },
+                            onRetry = { refresh(notifyResult = true) },
+                            onSettings = { openExternal(Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)) },
+                            onPrivacy = { startActivity(Intent(this, PermissionsRationaleActivity::class.java)) },
+                            actionError = actionError,
+                            snackbarHostState = snackbarHostState,
+                            readVersion = readVersion,
+                        )
+                    }
                 } else HealthConnectionScreen(
                     state = state,
                     actionError = actionError,

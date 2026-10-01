@@ -83,6 +83,16 @@ class TodayDashboardTest {
         plot().performScrollTo().performTouchInput { click(Offset(width - 1f, height / 2f)) }
         assertTrue(selectedDate().startsWith(date.toString()))
 
+        source.current = CalorieTotals(1800.0, 1600.0)
+        retry()
+        compose.onNodeWithText("取得済み摂取：1800.0 kcal").assertExists()
+        compose.onNodeWithText("摂取可能量：1300.0 kcal").assertExists()
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：800.0 kcal"))
+        source.current = CalorieTotals(800.0, 1600.0)
+        retry()
+        compose.onNodeWithText("取得済み摂取：800.0 kcal").assertExists()
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：-200.0 kcal"))
+
         source.current = CalorieTotals(null, 1600.0)
         retry()
         assertTrue(selectedDate().startsWith(date.minusDays(1).toString()))
