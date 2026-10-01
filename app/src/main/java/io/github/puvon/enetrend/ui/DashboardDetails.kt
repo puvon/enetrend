@@ -81,7 +81,7 @@ internal fun DashboardDetails(day: DashboardChartDay) {
 
 /** Decorative icon: the adjacent text and row semantics convey its meaning without relying on color. */
 @Composable
-private fun DetailStatusIcon(status: DetailStatus) {
+internal fun DetailStatusIcon(status: DetailStatus) {
     val color = when (status) {
         DetailStatus.AVAILABLE -> if (MaterialTheme.colorScheme.surface.luminance() < 0.5f)
             Color(0xFF81C784) else Color(0xFF2E7D32)

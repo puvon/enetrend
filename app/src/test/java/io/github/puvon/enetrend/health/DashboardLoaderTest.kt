@@ -136,6 +136,39 @@ class DashboardLoaderTest {
         }
     }
 
+    @Test fun refreshedEndpointsAlignEverySeriesAndRestartPeriodCumulativeWithoutCountingExcludedToday() = runBlocking {
+        val source = populatedSource()
+        val loader = DashboardLoader(HealthDataRepository(source))
+        for (intake in listOf(null, 1200.0, null, 0.0)) {
+            source.read = { if (it.startDate == today) CalorieTotals(intake, 1600.0) else CalorieTotals(2100.0, 2000.0) }
+            val data = (loader.load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+            val chart = DashboardChartProjector.project(data)
+            val end = if (intake == 1200.0) today.plusDays(1) else today
+            assertEquals(end.minusDays(7), chart.range.startDate)
+            assertEquals(end, chart.range.endDateExclusive)
+            assertEquals(7, chart.days.size)
+            assertEquals(if (intake == 1200.0) 200.0 else 700.0, data.balances.periodCumulative.last().kilocalories!!, 0.0)
+            assertTrue(data.balances.periodCumulative.all { it.missingDates.isEmpty() })
+            chart.days.forEach { day ->
+                assertEquals(day.date, day.daily?.date)
+                assertEquals(day.date, day.periodCumulative?.date)
+                assertEquals(day.date, day.weight?.date)
+            }
+            assertEquals(1300.0, requireNotNull(data.today).calorieSummary.intakeAllowanceKilocalories!!, 1e-9)
+        }
+    }
+
+    @Test fun positiveTodaysIntakeWithMissingConsumptionKeepsTodayButNotAnInventedDailyBalance() = runBlocking {
+        val source = Source().apply {
+            read = { if (it.startDate == today) CalorieTotals(1200.0, null) else CalorieTotals(2100.0, 2000.0) }
+        }
+        val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        assertEquals(today.plusDays(1), data.balances.range.endDateExclusive)
+        assertNull(data.balances.daily.last().kilocalories)
+        assertEquals(setOf(today), data.balances.periodCumulative.last().missingDates)
+        assertEquals(600.0, data.balances.periodCumulative.last().kilocalories!!, 0.0)
+    }
+
     @Test fun sevenDayInputsAreIndependentOfDisplayAndAverageAndExcludeToday() = runBlocking {
         val fixed = Clock.fixed(Instant.parse("2026-09-14T03:00:00Z"), ZoneOffset.UTC)
         val source = Source().apply {

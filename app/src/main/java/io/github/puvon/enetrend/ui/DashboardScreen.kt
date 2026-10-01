@@ -101,7 +101,19 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     val chart = remember(data) { DashboardChartProjector.project(data) }
     val days = chart.days
     val range = data.balances.range
+    val resolvedDate = selectedChartDate(selectedDate, range).toString()
+    // Persist the resolved default/fallback too, so a later refresh cannot revive an old selection.
+    SideEffect { if (selectedDate != resolvedDate) onSelectedDate(resolvedDate) }
+    data.today?.let { TodayCard(it) }
+    Text("推移", style = MaterialTheme.typography.titleMedium)
     Text("${range.startDate} ～ ${range.endDateExclusive.minusDays(1)}")
+    data.today?.let { today ->
+        Text(when {
+            today.includesTodayInTrend -> "今日まで表示しています。当日の摂取・消費は途中の値です。"
+            today.calories.intakeKilocalories == 0.0 -> "当日の摂取が0 kcalのため、推移は昨日まで表示しています。"
+            else -> "当日の摂取データが未取得のため、推移は昨日まで表示しています。未記録・連携待ちの可能性があります。"
+        })
+    }
     if (data.historyLimited) Text("表示期間前のデータへのアクセスが制限されています。開始付近の平均・補間は利用できる記録だけに基づきます。")
     if (!data.hasData) {
         Text("この期間に表示できるデータがありません。")
@@ -111,7 +123,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
         return
     }
 
-    val selected = days.indexOfFirst { it.date.toString() == selectedDate }.takeIf { it >= 0 } ?: days.lastIndex
+    val selected = days.indexOfFirst { it.date.toString() == resolvedDate }.takeIf { it >= 0 } ?: days.lastIndex
     DashboardChart(chart, selected) { onSelectedDate(days[it].date.toString()) }
     controls()
     if (data.balances.daily.none { it.source.intake != DisplayValue.Missing })
@@ -133,7 +145,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
             stateDescription = days[selected].date.toString()
         })
     DashboardDetails(days[selected])
-    Text("今日の記録は途中です。記録がある日も記録漏れがないとは限りません。参考累積は欠測日も前日値を維持します。体重・移動平均の欠測は線でつなぎません。移動平均は取得できた実測値のみを使用します。")
+    Text("記録がある日も記録漏れがないとは限りません。参考累積は欠測日も前日値を維持します。体重・移動平均の欠測は線でつなぎません。移動平均は取得できた実測値のみを使用します。")
 }
 
 @Composable

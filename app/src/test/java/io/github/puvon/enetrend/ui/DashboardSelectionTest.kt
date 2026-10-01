@@ -2,8 +2,27 @@ package io.github.puvon.enetrend.ui
 
 import org.junit.Assert.*
 import org.junit.Test
+import io.github.puvon.enetrend.health.HealthDataRange
+import java.time.LocalDate
+import java.time.ZoneId
 
 class DashboardSelectionTest {
+    @Test fun selectionKeepsInRangeDateAndResolvesBothOutsideBoundariesToEnd() {
+        val end = LocalDate.of(2026, 10, 1)
+        val range = HealthDataRange(end.minusDays(7), end, ZoneId.of("Asia/Tokyo"))
+        assertEquals(end.minusDays(7), selectedChartDate(range.startDate.toString(), range))
+        assertEquals(end.minusDays(3), selectedChartDate(end.minusDays(3).toString(), range))
+        for (saved in listOf(null, "invalid", end.toString(), end.minusDays(8).toString())) {
+            assertEquals(end.minusDays(1), selectedChartDate(saved, range))
+        }
+    }
+
+    @Test fun calorieDisplayRoundsOnlyAtPresentationAndKeepsNegativeSign() {
+        assertEquals("1999.9 kcal", 1999.94.formatted("kcal"))
+        assertEquals("-500.0 kcal", (-500.0).formatted("kcal"))
+        assertEquals("0.0 kcal", 0.0.formatted("kcal"))
+        assertEquals("算出不可", (null as Double?).formatted("kcal", "算出不可"))
+    }
     @Test fun plotMarginsAndStartBoundarySelectFirstAndLastDays() {
         assertEquals(0, chartDayAt(0.0, 310.0, 5.0, 3))
         assertEquals(0, chartDayAt(5.0, 310.0, 5.0, 3))

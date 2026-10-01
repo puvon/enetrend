@@ -1,8 +1,16 @@
 package io.github.puvon.enetrend.ui
 
 import io.github.puvon.enetrend.health.DisplayValue
+import io.github.puvon.enetrend.health.HealthDataRange
+import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.floor
+
+internal fun selectedChartDate(savedDate: String?, range: HealthDataRange): LocalDate {
+    val saved = savedDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+    return saved?.takeIf { it >= range.startDate && it < range.endDateExclusive }
+        ?: range.endDateExclusive.minusDays(1)
+}
 
 /** The start boundary belongs to the first day, not to a fabricated zero-valued record. */
 internal fun chartDayAt(x: Double, width: Double, inset: Double, dayCount: Int): Int? {
@@ -56,7 +64,8 @@ private fun DisplayValue?.status(): DetailStatus = when (this) {
     DisplayValue.Missing, null -> DetailStatus.MISSING
 }
 
-private fun Double?.formatted(unit: String): String = this?.let { String.format(Locale.JAPAN, "%.1f %s", it, unit) } ?: "未算出"
+internal fun Double?.formatted(unit: String, missing: String = "未算出"): String =
+    this?.let { String.format(Locale.JAPAN, "%.1f %s", it, unit) } ?: missing
 private fun DisplayValue?.label(unit: String): String = when (this) {
     is DisplayValue.Recorded -> value.formatted(unit)
     is DisplayValue.Interpolated -> "${value.formatted(unit)}（補間：$previousRecordedDate ～ $nextRecordedDate）"

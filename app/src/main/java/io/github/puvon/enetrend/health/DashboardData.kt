@@ -16,6 +16,7 @@ data class TodayStatus(
 ) {
     val includesTodayInTrend: Boolean get() = calories.hasPositiveIntake
     val hasData: Boolean get() = calories.intakeKilocalories != null || calories.burnedKilocalories != null
+    val calorieSummary: TodayCalorieSummary = TodayCalorieCalculator.calculate(this)
 }
 
 data class DashboardData(
@@ -24,7 +25,7 @@ data class DashboardData(
     val historyLimited: Boolean,
     val today: TodayStatus? = null,
 ) {
-    // Existing chart visibility remains independent of the future today card.
+    // Chart visibility is independent of the today card.
     val hasData: Boolean get() = balances.daily.any {
         it.source.intake != DisplayValue.Missing || it.source.burned != DisplayValue.Missing
     } || weights.any { it.display != DisplayValue.Missing || it.movingAverage.kilograms != null }
