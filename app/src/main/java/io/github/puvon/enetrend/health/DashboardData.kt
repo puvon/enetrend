@@ -14,7 +14,7 @@ data class TodayStatus(
     val calories: CalorieTotals,
     val previousSevenDays: DailyCalorieData,
 ) {
-    val includesTodayInTrend: Boolean get() = calories.hasPositiveIntake
+    val includesTodayBalance: Boolean get() = calories.hasPositiveIntake
     val hasData: Boolean get() = calories.intakeKilocalories != null || calories.burnedKilocalories != null
     val calorieSummary: TodayCalorieSummary = TodayCalorieCalculator.calculate(this)
 }
@@ -27,7 +27,8 @@ data class DashboardData(
 ) {
     // Chart visibility is independent of the today card.
     val hasData: Boolean get() = balances.daily.any {
-        it.source.intake != DisplayValue.Missing || it.source.burned != DisplayValue.Missing
+        (it.date != today?.date || today?.includesTodayBalance == true) &&
+            (it.source.intake != DisplayValue.Missing || it.source.burned != DisplayValue.Missing)
     } || weights.any { it.display != DisplayValue.Missing || it.movingAverage.kilograms != null }
 }
 
@@ -71,8 +72,7 @@ class DashboardLoader(
             is HealthReadFailure -> return DashboardState.Failed(result)
         }
         val totals = todayCalories.recorded.getValue(today)
-        val lastDay = if (totals.hasPositiveIntake) today else today.minusDays(1)
-        val selected = HealthDataRange(lastDay.minusDays(displayDays.toLong() - 1), lastDay.plusDays(1), zone)
+        val selected = HealthDataRange(today.minusDays(displayDays.toLong() - 1), today.plusDays(1), zone)
         val contextDays = maxOf(averagePeriod.days - 1, InterpolationPolicy().maxConsecutiveMissingDays + 1)
         val trendContext = HealthDataRange(selected.startDate.minusDays(contextDays.toLong()), selected.endDateExclusive, zone)
         val previousSeven = HealthDataRange(today.minusDays(7), today, zone)
@@ -86,8 +86,17 @@ class DashboardLoader(
             past.recorded + todayCalories.recorded,
             past.accessRestrictedDates,
         )
-        // The excluded today must not serve as an interpolation anchor for earlier days.
-        val trendCalories = allCalories.within(trendContext)
+        // Keep the date axis and weight window through today, but stop balances before an
+        // unreported/zero intake day. Its partial consumption must not interpolate earlier days.
+        val balanceEnd = if (totals.hasPositiveIntake) selected.endDateExclusive else today
+        val trendCalories = allCalories.within(trendContext.copy(endDateExclusive = balanceEnd))
+        val calculated = CalorieBalanceCalculator.calculate(trendCalories, selected.copy(endDateExclusive = balanceEnd))
+        val balances = calculated.copy(
+            range = selected,
+            // Keep actual intake/consumption in date details without calculating today's balance.
+            daily = calculated.daily + if (totals.hasPositiveIntake) emptyList() else
+                listOf(DailyCalorieBalance(todayCalories.forDisplay().single(), null)),
+        )
         var weightHistoryLimited = false
         val firstWeights = repository.readWeights(trendContext)
         val weightResult = if (firstWeights == HealthDataResult.AccessDenied) {
@@ -99,7 +108,7 @@ class DashboardLoader(
             is HealthReadFailure -> return DashboardState.Failed(weightResult)
         }
         val data = DashboardData(
-            CalorieBalanceCalculator.calculate(trendCalories, selected),
+            balances,
             WeightTrendCalculator.calculate(weights, selected, averagePeriod),
             past.accessRestrictedDates.isNotEmpty() || weightHistoryLimited,
             TodayStatus(today, readStartedAt, totals, allCalories.within(previousSeven)),

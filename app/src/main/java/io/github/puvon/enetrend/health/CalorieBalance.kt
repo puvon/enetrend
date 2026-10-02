@@ -29,6 +29,7 @@ data class PeriodCumulativeCalorieBalance(
 data class CalorieBalanceSeries(
     val range: HealthDataRange,
     val daily: List<DailyCalorieBalance>,
+    // Dates intentionally excluded from balance display have no cumulative entry.
     val periodCumulative: List<PeriodCumulativeCalorieBalance>,
 ) {
     /** A period boundary, not a zero-valued daily record, even when the first day is missing. */

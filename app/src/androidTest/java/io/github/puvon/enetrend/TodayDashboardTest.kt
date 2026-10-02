@@ -33,11 +33,13 @@ class TodayDashboardTest {
     private class Source(val date: LocalDate) : HealthDataSource {
         override val requiredPermissions = setOf("read")
         @Volatile var current = CalorieTotals(null, 1600.0)
+        var history = CalorieTotals(2100.0, 2000.0)
+        var weights = emptyList<WeightMeasurement>()
         override fun availability() = HealthAvailability.AVAILABLE
         override suspend fun grantedPermissions() = requiredPermissions
         override suspend fun readCalorieTotals(range: HealthDataRange) =
-            if (range.startDate == date) current else CalorieTotals(2100.0, 2000.0)
-        override suspend fun readWeightPage(range: HealthDataRange, pageToken: String?) = WeightPage(emptyList(), null)
+            if (range.startDate == date) current else history
+        override suspend fun readWeightPage(range: HealthDataRange, pageToken: String?) = WeightPage(weights, null)
     }
 
     private fun route(source: Source) {
@@ -65,11 +67,12 @@ class TodayDashboardTest {
         DailyCalorieData(HealthDataRange(date.minusDays(7), date, zone), records, restricted))
     private fun fullWeek() = (1L..7L).associate { date.minusDays(it) to CalorieTotals(2100.0, 2000.0) }
 
-    @Test fun refreshKeepsDefaultDateThenPersistsFallbackAfterTodayIsRemoved() {
+    @Test fun refreshKeepsTodaySelectedAndHidesOnlyBalancesWhenIntakeIsRemoved() {
         val source = Source(date)
         route(source)
         waitForPlot()
-        assertTrue(selectedDate().startsWith(date.minusDays(1).toString()))
+        assertTrue(selectedDate().startsWith(date.toString()))
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：未算出"))
         compose.onNodeWithText("当日の摂取データが未取得のため", substring = true).assertExists()
         compose.onNodeWithText("摂取可能量：1300.0 kcal").performScrollTo().assertIsDisplayed()
         val cardTop = compose.onNodeWithText("今日の状況（$date）").fetchSemanticsNode().positionInRoot.y
@@ -78,8 +81,8 @@ class TodayDashboardTest {
         source.current = CalorieTotals(1200.0, 1600.0)
         retry()
         compose.onNodeWithText("今日まで表示しています。", substring = true).assertExists()
-        assertTrue(selectedDate().startsWith(date.minusDays(1).toString()))
-        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：600.0 kcal"))
+        assertTrue(selectedDate().startsWith(date.toString()))
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：200.0 kcal"))
         plot().performScrollTo().performTouchInput { click(Offset(width - 1f, height / 2f)) }
         assertTrue(selectedDate().startsWith(date.toString()))
 
@@ -95,11 +98,11 @@ class TodayDashboardTest {
 
         source.current = CalorieTotals(null, 1600.0)
         retry()
-        assertTrue(selectedDate().startsWith(date.minusDays(1).toString()))
-        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：700.0 kcal"))
+        assertTrue(selectedDate().startsWith(date.toString()))
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：未算出"))
         source.current = CalorieTotals(1200.0, 1600.0)
         retry()
-        assertTrue(selectedDate().startsWith(date.minusDays(1).toString()))
+        assertTrue(selectedDate().startsWith(date.toString()))
 
         source.current = CalorieTotals(0.0, 1600.0)
         retry()
@@ -108,15 +111,15 @@ class TodayDashboardTest {
         compose.onNodeWithText("取得済み摂取：未取得").assertDoesNotExist()
     }
 
-    @Test fun shiftedStartFallsBackToEndAndPeriodAverageAndSelectionDoNotChangeAllowance() {
+    @Test fun intakeRefreshKeepsFirstDayAndPeriodAverageAndSelectionDoNotChangeAllowance() {
         val source = Source(date)
         route(source)
         waitForPlot()
         plot().performScrollTo().performTouchInput { click(Offset(1f, height / 2f)) }
-        assertTrue(selectedDate().startsWith(date.minusDays(7).toString()))
+        assertTrue(selectedDate().startsWith(date.minusDays(6).toString()))
         source.current = CalorieTotals(1200.0, 1600.0)
         retry()
-        assertTrue(selectedDate().startsWith(date.toString()))
+        assertTrue(selectedDate().startsWith(date.minusDays(6).toString()))
         compose.onNodeWithText("摂取可能量：1300.0 kcal").assertExists()
         compose.onNodeWithText("14日間").performScrollTo().performClick()
         waitForPlot()
@@ -125,6 +128,27 @@ class TodayDashboardTest {
         plot().performScrollTo().performTouchInput { click(Offset(1f, height / 2f)) }
         compose.onNodeWithText("摂取可能量：1300.0 kcal").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("消費記録7/7日・収支算出7/7日").assertExists()
+    }
+
+    @Test fun todaysWeightAndAverageAreVisibleWithoutIntakeOrHistoricalCalories() {
+        val source = Source(date).apply {
+            history = CalorieTotals(null, null)
+            weights = listOf(WeightMeasurement("today", date.atTime(7, 0).atZone(zone).toInstant(), null,
+                70.0, "test", Instant.EPOCH))
+        }
+        route(source)
+        waitForPlot()
+        for (intake in listOf(null, 0.0)) {
+            source.current = CalorieTotals(intake, 1600.0)
+            retry()
+            val description = plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+            assertTrue(description.startsWith(date.toString()))
+            assertTrue(description.contains("体重：70.0 kg"))
+            assertTrue(description.contains("7日移動平均：70.0 kg"))
+            assertTrue(description.contains("日別収支：未算出"))
+            assertTrue(description.contains("期間累積収支：未算出"))
+            compose.onNodeWithText("${date.minusDays(6)} ～ $date").assertExists()
+        }
     }
 
     @Test fun todayCardRemainsVisibleWhenTrendAndThenAllCaloriesAreEmpty() {

@@ -74,7 +74,7 @@ class DashboardTimeChangeTest {
         instant.set(Instant.parse("2026-09-30T15:00:01Z"))
         source.calories = CalorieTotals(null, 10.0)
         waitForDay("2026-10-01")
-        compose.onAllNodesWithText("2026-09-24 ～ 2026-09-30").assertCountEquals(2)
+        compose.onNodeWithText("2026-09-25 ～ 2026-10-01").assertExists()
         compose.onNodeWithText("取得済み消費：10.0 kcal").assertExists()
         compose.onNodeWithText("今日の状況（2026-09-30）").assertDoesNotExist()
     }
@@ -113,8 +113,8 @@ class DashboardTimeChangeTest {
         compose.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         waitForDay("2026-10-01")
         compose.onNodeWithText("取得済み消費：600.0 kcal").assertExists()
-        compose.onAllNodesWithText("2026-09-24 ～ 2026-09-30").assertCountEquals(2)
-        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].startsWith("2026-09-24"))
+        compose.onNodeWithText("2026-09-25 ～ 2026-10-01").assertExists()
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].startsWith("2026-10-01"))
         assertTrue(source.calls.get() > stoppedCalls)
     }
 
