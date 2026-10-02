@@ -2,10 +2,14 @@ package io.github.puvon.enetrend.health
 
 import androidx.health.connect.client.units.Energy
 import androidx.health.connect.client.units.Mass
+import androidx.health.connect.client.units.Percentage
 import org.junit.Assert.*
 import org.junit.Test
 
 class HealthUnitsTest {
+    @Test fun fatPercentageRemainsPercentRatherThanFraction() {
+        assertEquals(20.0, HealthUnits.percent(Percentage(20.0)), 0.0)
+    }
     @Test fun energyIsNormalizedToKilocalories() {
         for (energy in listOf(Energy.calories(1000.0), Energy.kilocalories(1.0), Energy.joules(4184.0))) {
             val actual = requireNotNull(HealthUnits.kilocalories(energy))

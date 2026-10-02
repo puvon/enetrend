@@ -14,16 +14,17 @@ data class TodayCalorieSummary(
     val burnedRecordedDays: Int,
     val balanceRecordedDays: Int,
     val accessRestrictedDays: Int,
+    val correctedDays: Int = 0,
 ) {
     val hasMissingRecords: Boolean get() = balanceRecordedDays + accessRestrictedDays < 7
 }
 
-/** Seven calendar days, raw aggregates only. The allowance is a daily total, not a remainder. */
+/** Seven calendar days, reconstructed or recorded consumption, never interpolated values. */
 object TodayCalorieCalculator {
     fun calculate(status: TodayStatus): TodayCalorieSummary {
         val window = HealthDataRange(status.date.minusDays(7), status.date, status.previousSevenDays.range.zoneId)
         val past = status.previousSevenDays.within(window)
-        val consumption = past.recorded.values.mapNotNull { it.burnedKilocalories }
+        val consumption = past.recorded.values.mapNotNull { it.effectiveBurnedKilocalories }
         require(consumption.all { it.isFinite() })
         // Avoid overflowing the intermediate sum or comparing a rounded display value with today's value.
         val predicted = if (consumption.isEmpty()) null else consumption
@@ -49,6 +50,7 @@ object TodayCalorieCalculator {
         return TodayCalorieSummary(
             predicted, basisValue, basis, previousBalance, allowance,
             consumption.size, balances.daily.count { it.kilocalories != null }, past.accessRestrictedDates.size,
+            past.recorded.values.count { it.metabolism?.totalKilocalories != null },
         )
     }
 }

@@ -19,6 +19,9 @@ class AndroidHealthDataSource(context: Context) : HealthDataSource {
     override fun availability(): HealthAvailability = connection.availability()
     override suspend fun grantedPermissions(): Set<String> = connection.grantedPermissions()
 
+    override suspend fun readMetabolism(range: HealthDataRange): MetabolismInputs =
+        MetabolismReader(AndroidMetabolismSource(client)).read(range)
+
     override suspend fun readCalorieTotals(range: HealthDataRange): CalorieTotals {
         val result = client.aggregate(
             AggregateRequest(

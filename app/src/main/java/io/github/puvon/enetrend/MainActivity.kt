@@ -3,6 +3,7 @@ package io.github.puvon.enetrend
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import androidx.core.net.toUri
+import androidx.core.content.edit
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -27,10 +28,13 @@ import io.github.puvon.enetrend.ui.DashboardRoute
 import io.github.puvon.enetrend.ui.HealthConnectionScreen
 import io.github.puvon.enetrend.ui.theme.EnetrendTheme
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    private val connection by lazy { HealthConnection(AndroidHealthConnection(this)) }
+    private val connectionGateway by lazy { AndroidHealthConnection(this) }
+    private val connection by lazy { HealthConnection(connectionGateway) }
+    private val permissionPreferences by lazy { getSharedPreferences("permission_prompts", MODE_PRIVATE) }
     private val dashboardLoader by lazy { DashboardLoader(HealthDataRepository(AndroidHealthDataSource(this))) }
     private var state: HealthConnectionState by mutableStateOf(HealthConnectionState.Checking)
     private var actionError by mutableStateOf(false)
@@ -63,6 +67,7 @@ class MainActivity : ComponentActivity() {
                             actionError = actionError,
                             snackbarHostState = snackbarHostState,
                             readVersion = readVersion,
+                            onMetabolismPermissions = { launchReadPermissions() },
                         )
                     }
                 } else HealthConnectionScreen(
@@ -105,11 +110,29 @@ class MainActivity : ComponentActivity() {
         actionError = false
         checkJob = lifecycleScope.launch {
             state = connection.check()
+            if (requestPermissions && state is HealthConnectionState.PermissionsRequired) {
+                launchReadPermissions()
+                return@launch
+            }
+            if (state == HealthConnectionState.Ready &&
+                !permissionPreferences.getBoolean("metabolism_requested", false)) {
+                try {
+                    val granted = connectionGateway.grantedPermissions()
+                    if (!granted.containsAll(AndroidHealthConnection.METABOLISM_PERMISSIONS)) {
+                        launchReadPermissions()
+                        return@launch
+                    }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (_: Exception) {
+                    actionError = true
+                }
+            }
             if (state == HealthConnectionState.Ready) readVersion++
             if (notifyResult) {
                 snackbarHostState.showSnackbar(
                     when (val result = state) {
-                        HealthConnectionState.Ready -> "再確認しました。読み取り権限は許可されています。"
+                        HealthConnectionState.Ready -> "再確認しました。基本の読み取り権限は許可されています。"
                         is HealthConnectionState.PermissionsRequired ->
                             "再確認しました。読み取り権限は ${result.grantedCount}/3 許可済みです。"
                         HealthConnectionState.Unavailable -> "再確認しました。この端末では利用できません。"
@@ -118,15 +141,18 @@ class MainActivity : ComponentActivity() {
                     },
                 )
             }
-            if (requestPermissions && state is HealthConnectionState.PermissionsRequired) {
-                try {
-                    permissionsLauncher.launch(AndroidHealthConnection.READ_PERMISSIONS)
-                } catch (_: ActivityNotFoundException) {
-                    actionError = true
-                } catch (_: SecurityException) {
-                    actionError = true
-                }
-            }
+        }
+    }
+
+    private fun launchReadPermissions() {
+        // 許可画面からの復帰・回転・拒否後の再起動で自動要求を繰り返さない。
+        permissionPreferences.edit { putBoolean("metabolism_requested", true) }
+        try {
+            permissionsLauncher.launch(AndroidHealthConnection.READ_PERMISSIONS + AndroidHealthConnection.METABOLISM_PERMISSIONS)
+        } catch (_: ActivityNotFoundException) {
+            actionError = true
+        } catch (_: SecurityException) {
+            actionError = true
         }
     }
 

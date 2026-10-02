@@ -52,7 +52,7 @@ class HealthConnectionScreenTest {
         compose.runOnIdle { assertEquals(1, installs) }
     }
 
-    @Test fun manifestAndRequestContainOnlyThreeReadPermissions() {
+    @Test fun manifestSeparatesThreeRequiredAndThreeOptionalReadPermissions() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val allPermissions = context.packageManager.getPackageInfo(
             context.packageName, PackageManager.GET_PERMISSIONS,
@@ -66,7 +66,13 @@ class HealthConnectionScreenTest {
             "android.permission.health.READ_TOTAL_CALORIES_BURNED",
             "android.permission.health.READ_WEIGHT",
         )
-        assertEquals(expected, permissions)
+        val optional = setOf(
+            "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+            "android.permission.health.READ_BODY_FAT",
+            "android.permission.health.READ_LEAN_BODY_MASS",
+        )
+        assertEquals(expected + optional, permissions)
         assertEquals(expected, AndroidHealthConnection.READ_PERMISSIONS)
+        assertEquals(optional, AndroidHealthConnection.METABOLISM_PERMISSIONS)
     }
 }

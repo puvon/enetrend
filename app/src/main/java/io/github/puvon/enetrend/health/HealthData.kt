@@ -35,12 +35,14 @@ data class LocalDayWindow(val date: LocalDate, val zoneId: ZoneId) {
     fun contains(time: Instant): Boolean = time >= startTime && time < endTime
 }
 
-/** Already aggregated by Health Connect for the entire request; never add raw calories to these. */
+/** Original Health Connect aggregates remain intact; optional reconstruction is separate metadata. */
 data class CalorieTotals(
     val intakeKilocalories: Double?,
     val burnedKilocalories: Double?,
     val dataOrigins: Set<String> = emptySet(),
+    val metabolism: MetabolismEstimate? = null,
 ) {
+    val effectiveBurnedKilocalories: Double? get() = metabolism?.totalKilocalories ?: burnedKilocalories
     val hasPositiveIntake: Boolean get() = (intakeKilocalories ?: 0.0) > 0.0
 }
 
@@ -83,6 +85,7 @@ sealed interface HealthDataResult {
 }
 
 interface HealthDataSource : HealthConnectionGateway {
+    suspend fun readMetabolism(range: HealthDataRange): MetabolismInputs = MetabolismInputs()
     suspend fun readCalorieTotals(range: HealthDataRange): CalorieTotals
     suspend fun readWeightPage(range: HealthDataRange, pageToken: String?): WeightPage
 }

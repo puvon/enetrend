@@ -52,6 +52,7 @@ internal fun TodayCard(status: TodayStatus) {
             if (summary.previousBalanceKilocalories == null) Text("過去収支の補正なし", style = MaterialTheme.typography.bodySmall)
             Text("${status.date.minusDays(7)} ～ ${status.date.minusDays(1)}", style = MaterialTheme.typography.bodySmall)
             Text("消費記録${summary.burnedRecordedDays}/7日・収支算出${summary.balanceRecordedDays}/7日", style = MaterialTheme.typography.bodySmall)
+            Text("消費の採用内訳：体組成による推定${summary.correctedDays}日・従来取得値${summary.burnedRecordedDays - summary.correctedDays}日", style = MaterialTheme.typography.bodySmall)
             Text("取得開始：${DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(status.readStartedAt.atZone(status.previousSevenDays.range.zoneId))}",
                 style = MaterialTheme.typography.bodySmall)
         }
@@ -64,7 +65,7 @@ internal fun TodayCard(status: TodayStatus) {
                     Text(allowance)
                     Text("摂取可能量 = 計算に使う消費 − 過去7日収支")
                     Text("計算に使う消費：${summary.basisBurnedKilocalories.formatted("kcal", "算出不可")}")
-                    Text("予測消費は昨日まで7暦日の取得済み消費の平均です。取得済みの当日消費が予測を上回れば、その値を使います。片方だけある場合は取得できた側を使います。")
+                    Text("予測消費は昨日まで7暦日の採用消費の平均です。補正可能な日は推定RMR＋Fitbit活動消費、それ以外は従来取得値を使います。当日は補正せず、取得済み消費が予測を上回ればその値を使います。片方だけある場合は利用できる側を使います。")
                     Text("過去7日収支は摂取と消費の両方がある日の「摂取 − 消費」の合計です。全額を反映し、過去7日と今日の計8日分を相殺する計算です。今日の摂取済み量は差し引いていません。")
                     Text("欠測・補間値は平均や収支に含めません。欠測日は0に置き換えず、収支を算出できる日がなければ補正しません。7日窓が動くと摂取可能量も変わります。")
                     if (quality.isNotEmpty()) {

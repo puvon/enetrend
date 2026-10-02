@@ -8,7 +8,7 @@ data class DailyCalorieBalance(
 ) {
     val date: LocalDate get() = source.date
     val isEstimated: Boolean get() = kilocalories != null &&
-        (source.intake is DisplayValue.Interpolated || source.burned is DisplayValue.Interpolated)
+        (source.intake is DisplayValue.Interpolated || source.burned is DisplayValue.Interpolated || source.burned is DisplayValue.Estimated)
 }
 
 /** Sum from startDate through date, inclusive. Completeness describes available daily balances,
@@ -89,6 +89,7 @@ object CalorieBalanceCalculator {
 
     private fun DisplayValue.number(): Double? {
         val value = when (this) {
+            is DisplayValue.Estimated -> value
             is DisplayValue.Recorded -> value
             is DisplayValue.Interpolated -> value
             DisplayValue.Missing -> null

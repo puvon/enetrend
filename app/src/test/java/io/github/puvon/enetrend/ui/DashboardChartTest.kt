@@ -83,7 +83,7 @@ class DashboardChartTest {
         val default = DashboardChartProjector.project(input)
         val changed = DashboardChartProjector.project(input, 3500.0)
         assertEquals(default.dailyScale, changed.dailyScale)
-        close(-400.0, default.dailyScale.min)
+        close(-20000.0, default.dailyScale.min)
         close(70.0 - 9000.0 / 3500.0, changed.weightScale?.min)
         assertEquals(default.days.map { it.periodCumulative }, changed.days.map { it.periodCumulative })
     }

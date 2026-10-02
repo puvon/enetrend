@@ -27,8 +27,8 @@ data class DashboardData(
 ) {
     // Chart visibility is independent of the today card.
     val hasData: Boolean get() = balances.daily.any {
-        (it.date != today?.date || today?.includesTodayBalance == true) &&
-            (it.source.intake != DisplayValue.Missing || it.source.burned != DisplayValue.Missing)
+        it.source.burned != DisplayValue.Missing ||
+            ((it.date != today?.date || today?.includesTodayBalance == true) && it.source.intake != DisplayValue.Missing)
     } || weights.any { it.display != DisplayValue.Missing || it.movingAverage.kilograms != null }
 }
 
@@ -81,9 +81,11 @@ class DashboardLoader(
             is DailyCaloriesResult.Available -> result.data
             is HealthReadFailure -> return DashboardState.Failed(result)
         }
+        val metabolismRange = HealthDataRange(minOf(selected.startDate, previousSeven.startDate), selected.endDateExclusive, zone)
+        val metabolism = MetabolismCalculator.calculate(repository.readMetabolism(metabolismRange), metabolismRange, today)
         val allCalories = DailyCalorieData(
             HealthDataRange(pastRange.startDate, todayRange.endDateExclusive, zone),
-            past.recorded + todayCalories.recorded,
+            (past.recorded + todayCalories.recorded).mapValues { (date, calories) -> calories.copy(metabolism = metabolism[date]) },
             past.accessRestrictedDates,
         )
         // Keep the date axis and weight window through today, but stop balances before an
@@ -95,7 +97,7 @@ class DashboardLoader(
             range = selected,
             // Keep actual intake/consumption in date details without calculating today's balance.
             daily = calculated.daily + if (totals.hasPositiveIntake) emptyList() else
-                listOf(DailyCalorieBalance(todayCalories.forDisplay().single(), null)),
+                listOf(DailyCalorieBalance(allCalories.within(todayRange).forDisplay().single(), null)),
         )
         var weightHistoryLimited = false
         val firstWeights = repository.readWeights(trendContext)

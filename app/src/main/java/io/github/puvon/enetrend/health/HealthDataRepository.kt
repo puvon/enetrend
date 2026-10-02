@@ -7,6 +7,17 @@ import java.time.LocalDate
 
 /** Foreground reads only. A failed page never produces a seemingly complete partial result. */
 class HealthDataRepository(private val source: HealthDataSource) {
+    suspend fun readMetabolism(range: HealthDataRange): MetabolismInputs = try {
+        currentCoroutineContext().ensureActive()
+        source.readMetabolism(range)
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: SecurityException) {
+        MetabolismInputs(bodyIssues = setOf(OptionalReadState.ACCESS_DENIED))
+    } catch (_: Exception) {
+        MetabolismInputs(bodyIssues = setOf(OptionalReadState.ERROR))
+    }
+
     /** Older optional context may be inaccessible, but is never reported as an empty read. */
     suspend fun readDailyCalories(
         range: HealthDataRange,

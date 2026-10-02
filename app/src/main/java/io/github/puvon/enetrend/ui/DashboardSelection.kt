@@ -2,6 +2,8 @@ package io.github.puvon.enetrend.ui
 
 import io.github.puvon.enetrend.health.DisplayValue
 import io.github.puvon.enetrend.health.HealthDataRange
+import io.github.puvon.enetrend.health.MetabolismFallback
+import io.github.puvon.enetrend.health.OptionalReadState
 import java.time.LocalDate
 import java.util.Locale
 import kotlin.math.floor
@@ -31,6 +33,47 @@ internal fun DashboardChartDay.details(): List<DashboardDetail> = buildList {
     fun source(name: String, value: DisplayValue?) = DashboardDetail("$name：${value.label("kcal")}", listOf(value.status()))
     add(source("摂取", daily?.source?.intake))
     add(source("消費", daily?.source?.burned))
+    daily?.source?.recorded?.metabolism?.let { estimate ->
+        val notes = buildList {
+            addAll(estimate.readDiagnostics())
+            add("体組成はFitbit由来の同日代表値から直近14暦日で平滑化（有効${estimate.recordedDays}/14日）。最新測定：${estimate.latestMeasurementDate ?: "なし"}。")
+            add("推定RMR = 370 + 21.6 × 平滑化した除脂肪体重kg。筋肉量の実測や筋トレの因果効果ではありません。")
+            estimate.fallback?.let { add(when (it) {
+                MetabolismFallback.TODAY -> "当日は補正せず、途中の従来取得値を使用します。"
+                MetabolismFallback.INSUFFICIENT_DAYS -> "有効な体組成が3日未満のため従来値を使用します。"
+                MetabolismFallback.STALE_MEASUREMENT -> "最新測定から7日以上経過したため従来値を使用します。"
+                MetabolismFallback.ACTIVE_MISSING -> "Fitbit活動消費が未取得のため従来値を使用します。"
+                MetabolismFallback.INVALID_VALUE -> "補正用の値が有効でないため従来値を使用します。"
+            }) }
+            for (issue in estimate.bodyIssues + estimate.activeState + estimate.fitbitTotalState) when (issue) {
+                OptionalReadState.PERMISSION_REQUIRED -> add("補正用データの一部に読み取り権限がありません。")
+                OptionalReadState.ACCESS_DENIED -> add("補正用データの一部に履歴等のアクセス制限があります。")
+                OptionalReadState.ERROR -> add("補正用データの一部を取得できませんでした。再確認してください。")
+                OptionalReadState.AVAILABLE -> Unit
+            }
+        }
+        val correctionText = estimate.totalKilocalories.formatted("kcal") +
+            if (estimate.totalKilocalories == null) " — ${estimate.unavailableReason()}" else ""
+        add(DashboardDetail("補正後の推定総消費カロリー：$correctionText",
+            buildList {
+                add(if (estimate.totalKilocalories != null) DetailStatus.ESTIMATED else DetailStatus.UNAVAILABLE)
+                if (estimate.recordedDays in 1..13) add(DetailStatus.INSUFFICIENT)
+            }, notes))
+        add(DashboardDetail("従来の総消費：${daily.source.recorded.burnedKilocalories.formatted("kcal", "欠測")}",
+            listOf(if (daily.source.recorded.burnedKilocalories != null) DetailStatus.AVAILABLE else DetailStatus.MISSING)))
+        add(DashboardDetail("Fitbit総消費：${estimate.fitbitTotalKilocalories.formatted("kcal", "未取得")}",
+            listOf(if (estimate.fitbitTotalKilocalories != null) DetailStatus.AVAILABLE else DetailStatus.MISSING)))
+        add(DashboardDetail("推定安静時代謝：${estimate.restingKilocaloriesPerDay.formatted("kcal/day")}",
+            listOf(if (estimate.restingKilocaloriesPerDay != null) DetailStatus.ESTIMATED else DetailStatus.UNAVAILABLE)))
+        add(DashboardDetail("Fitbit活動消費：${estimate.activeKilocalories.formatted("kcal", "未取得")}",
+            listOf(if (estimate.activeKilocalories != null) DetailStatus.AVAILABLE else DetailStatus.MISSING)))
+        add(DashboardDetail("基準日比の推定安静時代謝増減：${restingChangeKilocaloriesPerDay.formatted("kcal/day")}",
+            listOf(if (restingChangeKilocaloriesPerDay != null) DetailStatus.ESTIMATED else DetailStatus.UNAVAILABLE),
+            listOf("基準日：${restingBaselineDate ?: "なし"}。表示期間を変えると基準日も変わります。")))
+        val difference = estimate.totalKilocalories?.let { corrected -> estimate.fitbitTotalKilocalories?.let { corrected - it } }
+        add(DashboardDetail("Fitbit総消費との差：${difference.formatted("kcal")}",
+            listOf(if (difference != null) DetailStatus.ESTIMATED else DetailStatus.UNAVAILABLE)))
+    }
     add(DashboardDetail("日別収支：${daily?.kilocalories.formatted("kcal")}${if (daily?.isEstimated == true) "（推定）" else ""}",
         listOf(if (daily?.kilocalories == null) DetailStatus.UNAVAILABLE else if (daily.isEstimated) DetailStatus.ESTIMATED else DetailStatus.AVAILABLE)))
     val period = periodCumulative
@@ -59,6 +102,7 @@ internal fun DashboardChartDay.detailLines(): List<String> = listOf(date.toStrin
 }
 
 private fun DisplayValue?.status(): DetailStatus = when (this) {
+    is DisplayValue.Estimated -> DetailStatus.ESTIMATED
     is DisplayValue.Recorded -> DetailStatus.AVAILABLE
     is DisplayValue.Interpolated -> DetailStatus.INTERPOLATED
     DisplayValue.Missing, null -> DetailStatus.MISSING
@@ -67,6 +111,7 @@ private fun DisplayValue?.status(): DetailStatus = when (this) {
 internal fun Double?.formatted(unit: String, missing: String = "未算出"): String =
     this?.let { String.format(Locale.JAPAN, "%.1f %s", it, unit) } ?: missing
 private fun DisplayValue?.label(unit: String): String = when (this) {
+    is DisplayValue.Estimated -> "${value.formatted(unit)}（体組成による推定）"
     is DisplayValue.Recorded -> value.formatted(unit)
     is DisplayValue.Interpolated -> "${value.formatted(unit)}（補間：$previousRecordedDate ～ $nextRecordedDate）"
     DisplayValue.Missing, null -> "欠測"

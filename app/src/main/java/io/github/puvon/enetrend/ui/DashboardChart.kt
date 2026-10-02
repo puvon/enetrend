@@ -53,6 +53,8 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
     val cumulativeColor = MaterialTheme.colorScheme.tertiary
     val weightColor = MaterialTheme.colorScheme.onSurface
     val averageColor = MaterialTheme.colorScheme.secondary
+    val restingColor = MaterialTheme.colorScheme.primary
+    val activeColor = MaterialTheme.colorScheme.tertiary
     val grid = MaterialTheme.colorScheme.outlineVariant
     Text("カロリー収支と体重", style = MaterialTheme.typography.titleMedium)
     TextButton(onClick = { legendExpanded = !legendExpanded }, modifier = Modifier.semantics {
@@ -70,7 +72,11 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
             }
         }
         Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
-        Text("期間累積の破線：補間由来の推定、または欠測日を除いた参考累積。詳細で区別します。", style = MaterialTheme.typography.labelSmall)
+        Text("細い消費棒：下から推定安静時代謝・Fitbit活動消費。左kcal軸を共用します。", style = MaterialTheme.typography.labelSmall)
+        Text("■ 推定安静時代謝", color = restingColor, style = MaterialTheme.typography.labelMedium)
+        Text("■ Fitbit活動消費", color = activeColor, style = MaterialTheme.typography.labelMedium)
+        Text("灰色の細い棒：従来総消費（内訳不明）。当日は従来値。体組成による補正も推定です。", style = MaterialTheme.typography.labelSmall)
+        Text("期間累積の破線：補間・体組成由来の推定、または欠測日を除いた参考累積。詳細で区別します。", style = MaterialTheme.typography.labelSmall)
         Text("日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）／0は中立色", style = MaterialTheme.typography.labelSmall)
         Text("期間累積は期間開始を0とし、右軸の中央から描画します。1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
         chart.baseline?.let {
@@ -89,7 +95,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                 chartDayAt(point.x.toDouble(), size.width.toDouble(), insetPx.toDouble(), chart.days.size)?.let(selectDay)
             }
         }.semantics {
-            contentDescription = "統合グラフ。共通の日付軸に日別収支の棒、期間累積収支、体重、移動平均の線。タップで日付を選択。数値は日付選択の下に表示。"
+            contentDescription = "統合グラフ。共通の日付軸に日別収支の棒、細い消費の積み上げ棒（下から推定安静時代謝、活動消費）、期間累積収支、体重、移動平均の線。タップで日付を選択。数値は日付選択の下に表示。"
             stateDescription = chart.days.getOrNull(selected)?.detailLines()?.joinToString("。") ?: "選択できる日付がありません。"
             customActions = buildList {
                 if (selected > 0) add(CustomAccessibilityAction("前の日") { selectDay(selected - 1); true })
@@ -113,7 +119,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                 chart.days.getOrNull(selected)?.let {
                     drawLine(grid, Offset(x(it.x), y(0.0)), Offset(x(it.x), y(1.0)), lineWidth)
                 }
-                val barWidth = plotWidth / chart.days.size.coerceAtLeast(1) * 0.6f
+                val barWidth = plotWidth / chart.days.size.coerceAtLeast(1) * DashboardChartProjector.BALANCE_BAR_FRACTION
                 chart.days.forEach { day -> day.dailyY?.let { value ->
                     val balance = requireNotNull(day.daily?.kilocalories)
                     val barColor = when {
@@ -130,6 +136,21 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                         if (day.daily?.isEstimated == true) drawRect(barColor.copy(alpha = 0.7f), position, Size(barWidth, height), style = Stroke(lineWidth))
                         else drawRect(barColor.copy(alpha = 0.35f), position, Size(barWidth, height))
                     }
+                } }
+                val consumptionWidth = plotWidth / chart.days.size.coerceAtLeast(1) * DashboardChartProjector.CONSUMPTION_BAR_FRACTION
+                chart.days.forEach { day -> day.burnedY?.let { top ->
+                    fun segment(from: Double, to: Double, color: Color, outline: Boolean = false) {
+                        val left = x(day.x) - consumptionWidth / 2
+                        val height = kotlin.math.abs(y(from) - y(to))
+                        if (height == 0f) drawLine(color, Offset(left, y(to)), Offset(left + consumptionWidth, y(to)), lineWidth)
+                        else if (outline) drawRect(color, Offset(left, minOf(y(to), y(from))), Size(consumptionWidth, height), style = Stroke(lineWidth))
+                        else drawRect(color, Offset(left, minOf(y(to), y(from))), Size(consumptionWidth, height))
+                    }
+                    val resting = day.restingY
+                    if (resting != null) {
+                        segment(chart.dailyZeroY, resting, restingColor)
+                        segment(resting, top, activeColor)
+                    } else segment(chart.dailyZeroY, top, dailyColor, day.daily?.source?.burned is DisplayValue.Interpolated)
                 } }
                 fun line(color: Color, value: (DashboardChartDay) -> Double?, estimated: (DashboardChartDay) -> Boolean,
                     dotted: Boolean = false, origin: Boolean = false, markers: Boolean = true) {

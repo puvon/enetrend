@@ -14,6 +14,10 @@ data class DashboardChartDay(
     val periodCumulativeY: Double?,
     val weightY: Double?,
     val movingAverageY: Double?,
+    val burnedY: Double? = null,
+    val restingY: Double? = null,
+    val restingBaselineDate: LocalDate? = null,
+    val restingChangeKilocaloriesPerDay: Double? = null,
 )
 
 /** The source remains available so a baseline taken from interpolation can be labelled. */
@@ -71,6 +75,8 @@ data class DashboardChartData(
 
 /** Presentation-only projection; never recalculates balances or generates weight records. */
 object DashboardChartProjector {
+    const val BALANCE_BAR_FRACTION = 0.6f
+    const val CONSUMPTION_BAR_FRACTION = 0.28f
     const val DEFAULT_KILOCALORIES_PER_KILOGRAM = 7000.0
 
     fun project(
@@ -91,7 +97,10 @@ object DashboardChartProjector {
             ChartWeightBaseline(it.date, it.display, requireNotNull(it.display.number() ?: it.movingAverage.kilograms),
                 isMovingAverage = it.display.number() == null)
         }
-        val dailyScale = ChartScale.daily(daily.values.mapNotNull { it.kilocalories })
+        val dailyScale = ChartScale.daily(daily.values.flatMap { listOfNotNull(it.kilocalories, it.source.burned.number()) })
+        val restingBaseline = dates.firstNotNullOfOrNull { date ->
+            daily[date]?.source?.recorded?.metabolism?.restingKilocaloriesPerDay?.let { date to it }
+        }
         fun cumulativePosition(value: Double): Double =
             (baseline?.kilograms ?: 0.0) + value / kilocaloriesPerKilogram
         val cumulativeValues = cumulative.values.mapNotNull { it.kilocalories }.map(::cumulativePosition)
@@ -109,6 +118,10 @@ object DashboardChartProjector {
                 period?.kilocalories?.let { cumulativeScale.y(cumulativePosition(it)) },
                 weight?.display?.number()?.let { requireNotNull(weightScale).y(it) },
                 weight?.movingAverage?.kilograms?.let { requireNotNull(weightScale).y(it) },
+                day?.source?.burned?.number()?.let(dailyScale::y),
+                day?.source?.recorded?.metabolism?.takeIf { it.totalKilocalories != null }?.restingKilocaloriesPerDay?.let(dailyScale::y),
+                restingBaseline?.first,
+                day?.source?.recorded?.metabolism?.restingKilocaloriesPerDay?.let { rmr -> restingBaseline?.let { rmr - it.second } },
             )
         }
         return DashboardChartData(range, days, dailyScale, weightScale, null, baseline,
@@ -123,6 +136,7 @@ object DashboardChartProjector {
     }
 
     private fun DisplayValue.number(): Double? = when (this) {
+        is DisplayValue.Estimated -> value
         is DisplayValue.Recorded -> value
         is DisplayValue.Interpolated -> value
         DisplayValue.Missing -> null

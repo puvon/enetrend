@@ -6,6 +6,9 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
+import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.LeanBodyMassRecord
 
 class AndroidHealthConnection(context: Context) : HealthConnectionGateway {
     private val appContext = context.applicationContext
@@ -23,6 +26,11 @@ class AndroidHealthConnection(context: Context) : HealthConnectionGateway {
 
     companion object {
         const val PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
+        val METABOLISM_PERMISSIONS: Set<String> = setOf(
+            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+            HealthPermission.getReadPermission(BodyFatRecord::class),
+            HealthPermission.getReadPermission(LeanBodyMassRecord::class),
+        )
         val READ_PERMISSIONS: Set<String> = setOf(
             HealthPermission.getReadPermission(NutritionRecord::class),
             HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),

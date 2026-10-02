@@ -39,6 +39,7 @@ fun DashboardRoute(
     readVersion: Int = 0,
     timeSource: DashboardTimeSource = remember { DashboardTimeSource() },
     timeChanges: Flow<Unit> = rememberDashboardTimeChanges(),
+    onMetabolismPermissions: (() -> Unit)? = null,
 ) {
     // A new request gets its own state immediately; an old result cannot appear under new controls.
     var state: DashboardState by remember(loader, displayDays, averagePeriod, readVersion) { mutableStateOf(DashboardState.Loading) }
@@ -73,7 +74,7 @@ fun DashboardRoute(
         }
     }
     DashboardScreen(state, displayDays, averagePeriod, onDisplayDays, onAveragePeriod,
-        onRetry, onSettings, onPrivacy, actionError, snackbarHostState)
+        onRetry, onSettings, onPrivacy, actionError, snackbarHostState, onMetabolismPermissions)
 }
 
 @Composable
@@ -88,6 +89,7 @@ fun DashboardScreen(
     onPrivacy: () -> Unit,
     actionError: Boolean = false,
     snackbarHostState: SnackbarHostState = remember { SnackbarHostState() },
+    onMetabolismPermissions: (() -> Unit)? = null,
 ) {
     // Keep the date through loading and restoration; changing display length starts at the latest day.
     var selectedDate by rememberSaveable(displayDays) { mutableStateOf<String?>(null) }
@@ -110,8 +112,14 @@ fun DashboardScreen(
                     HealthDataResult.AccessDenied -> "データへのアクセスが制限されています。権限と読み取り可能な期間を確認してください。"
                     HealthDataResult.Error -> "データを取得できませんでした。再確認でやり直してください。"
                 })
-                is DashboardState.Ready -> DashboardContent(state.data, selectedDate, { selectedDate = it }) {
-                    PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
+                is DashboardState.Ready -> {
+                    onMetabolismPermissions?.let { request ->
+                        TextButton(onClick = request) { Text("体組成による補正の読み取り権限（任意）") }
+                        Text("活動消費・体脂肪率・除脂肪体重を利用します。未許可・データ不足時は従来値を表示します。", style = MaterialTheme.typography.bodySmall)
+                    }
+                    DashboardContent(state.data, selectedDate, { selectedDate = it }) {
+                        PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
+                    }
                 }
             }
             if (state !is DashboardState.Ready) PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)

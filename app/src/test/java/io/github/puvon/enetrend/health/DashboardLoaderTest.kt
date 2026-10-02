@@ -261,19 +261,29 @@ class DashboardLoaderTest {
         val past = requireNotNull(data.today).previousSevenDays
         assertEquals(setOf(today.minusDays(7)), past.accessRestrictedDates)
         assertFalse(past.recorded.containsKey(today.minusDays(7)))
-        assertEquals(CalorieTotals(null, null), past.recorded[today.minusDays(3)])
-        assertEquals(CalorieTotals(0.0, 0.0), past.recorded[today.minusDays(2)])
+        assertEquals(CalorieTotals(null, null), past.recorded[today.minusDays(3)]?.copy(metabolism = null))
+        assertEquals(CalorieTotals(0.0, 0.0), past.recorded[today.minusDays(2)]?.copy(metabolism = null))
         assertEquals(6, past.recorded.size)
         assertTrue(data.historyLimited)
         assertEquals(source.ranges.size, source.ranges.distinct().size)
     }
 
-    @Test fun trendCanBeEmptyWhileTodayHasConsumption() = runBlocking {
+    @Test fun zeroIntakeAloneTodayDoesNotCreateAnEmptyChart() = runBlocking {
+        val source = Source().apply {
+            read = { if (it.startDate == today) CalorieTotals(0.0, null) else CalorieTotals(null, null) }
+        }
+        val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        assertFalse(data.hasData)
+        assertEquals(0.0, data.today?.calories?.intakeKilocalories)
+    }
+
+    @Test fun consumptionOnlyTodayHasVisibleBarWithoutBalance() = runBlocking {
         val source = Source().apply {
             read = { if (it.startDate == today) CalorieTotals(null, 900.0) else CalorieTotals(null, null) }
         }
         val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
-        assertFalse(data.hasData)
+        assertTrue(data.hasData)
+        assertNotNull(DashboardChartProjector.project(data).days.last().burnedY)
         assertTrue(requireNotNull(data.today).hasData)
         assertFalse(requireNotNull(data.today).previousSevenDays.hasRecordedData)
         assertTrue(data.balances.daily.all { it.kilocalories == null })
