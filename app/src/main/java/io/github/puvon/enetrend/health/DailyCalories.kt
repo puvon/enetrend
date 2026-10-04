@@ -5,7 +5,6 @@ import java.time.temporal.ChronoUnit
 
 /** Recorded means present in the source, not a guarantee of a complete day's logging. */
 sealed interface DisplayValue {
-    data class Estimated(val value: Double) : DisplayValue
     data class Recorded(val value: Double) : DisplayValue
     data class Interpolated(
         val value: Double,
@@ -96,7 +95,7 @@ data class DailyCalorieData(
             DailyCalorieDisplay(
                 day.date, totals,
                 totals.intakeKilocalories?.let { DisplayValue.Recorded(it) } ?: DisplayValue.Missing,
-                totals.metabolism?.totalKilocalories?.let { DisplayValue.Estimated(it) } ?: burnedValues.getValue(day.date),
+                burnedValues.getValue(day.date),
             )
         }.toList()
     }
