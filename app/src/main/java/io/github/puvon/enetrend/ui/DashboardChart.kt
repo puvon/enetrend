@@ -49,6 +49,8 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
     val plotInset = with(density) { textMeasurer.measure("0", axisStyle).size.height.toDp() / 2 }
     val insetPx = with(LocalDensity.current) { plotInset.toPx() }
     val dailyColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val intakeColor = MaterialTheme.colorScheme.primary
+    val burnedColor = MaterialTheme.colorScheme.onSurfaceVariant
     val balanceColors = LocalBalanceColors.current
     val cumulativeColor = MaterialTheme.colorScheme.tertiary
     val weightColor = MaterialTheme.colorScheme.onSurface
@@ -61,7 +63,8 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
     if (legendExpanded) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
-                Text("■ 日別カロリー収支", color = dailyColor, style = MaterialTheme.typography.labelMedium)
+                Text("● 摂取カロリー", color = intakeColor, style = MaterialTheme.typography.labelMedium)
+                Text("■ 消費カロリー", color = burnedColor, style = MaterialTheme.typography.labelMedium)
                 Text("━ 期間累積収支", color = cumulativeColor, style = MaterialTheme.typography.labelMedium)
             }
             Column(Modifier.weight(1f)) {
@@ -71,7 +74,8 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         }
         Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
         Text("期間累積の破線：補間由来の推定、または欠測日を除いた参考累積。詳細で区別します。", style = MaterialTheme.typography.labelSmall)
-        Text("日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）／0は中立色", style = MaterialTheme.typography.labelSmall)
+        Text("2点間の塗りが日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）。0は塗りなし。", style = MaterialTheme.typography.labelSmall)
+        Text("左軸は0からの摂取・消費kcal。欠測は線を切り、当日の摂取未取得は点を描きません。当日の摂取0も表示しますが、収支・累積は前日までです。", style = MaterialTheme.typography.labelSmall)
         Text("期間累積は期間開始を0とし、右軸の中央から描画します。1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
         chart.baseline?.let {
             val source = if (it.isMovingAverage) "移動平均" else if (it.source is DisplayValue.Interpolated) "補間" else "実測"
@@ -79,7 +83,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         } ?: Text("体重・移動平均なし：右軸は0中心の換算尺度です。体重の記録ではありません。", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("日別 kcal", style = MaterialTheme.typography.labelSmall)
+        Text("摂取・消費 kcal", style = MaterialTheme.typography.labelSmall)
         Text(if (chart.baseline != null) "体重 kg" else "換算 kg（体重なし）", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth().height(240.dp)) {
@@ -89,7 +93,7 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                 chartDayAt(point.x.toDouble(), size.width.toDouble(), insetPx.toDouble(), chart.days.size)?.let(selectDay)
             }
         }.semantics {
-            contentDescription = "統合グラフ。共通の日付軸に日別収支の棒、期間累積収支、体重、移動平均の線。タップで日付を選択。数値は日付選択の下に表示。"
+            contentDescription = "統合グラフ。共通の日付軸に摂取カロリー（丸）・消費カロリー（四角）の線、2点間の塗りは日別収支。正は暖色、負は寒色、0は塗りなし。期間累積収支、体重、移動平均の線。タップで日付を選択。数値は日付選択の下に表示。"
             stateDescription = chart.days.getOrNull(selected)?.detailLines()?.joinToString("。") ?: "選択できる日付がありません。"
             customActions = buildList {
                 if (selected > 0) add(CustomAccessibilityAction("前の日") { selectDay(selected - 1); true })
@@ -113,26 +117,17 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                 chart.days.getOrNull(selected)?.let {
                     drawLine(grid, Offset(x(it.x), y(0.0)), Offset(x(it.x), y(1.0)), lineWidth)
                 }
-                val barWidth = plotWidth / chart.days.size.coerceAtLeast(1) * 0.6f
-                chart.days.forEach { day -> day.dailyY?.let { value ->
-                    val balance = requireNotNull(day.daily?.kilocalories)
-                    val barColor = when {
-                        balance > 0 -> balanceColors.positive
-                        balance < 0 -> balanceColors.negative
-                        else -> dailyColor
-                    }
-                    val top = minOf(y(value), y(chart.dailyZeroY))
-                    val height = kotlin.math.abs(y(value) - y(chart.dailyZeroY))
-                    if (height == 0f) {
-                        drawLine(dailyColor, Offset(x(day.x) - barWidth / 2, top), Offset(x(day.x) + barWidth / 2, top), lineWidth)
-                    } else {
-                        val position = Offset(x(day.x) - barWidth / 2, top)
-                        if (day.daily?.isEstimated == true) drawRect(barColor.copy(alpha = 0.7f), position, Size(barWidth, height), style = Stroke(lineWidth))
-                        else drawRect(barColor.copy(alpha = 0.35f), position, Size(barWidth, height))
-                    }
+                val barWidth = (plotWidth / chart.days.size.coerceAtLeast(1) * ChartBalanceFill.DAY_WIDTH_FRACTION).toFloat()
+                chart.days.forEach { day -> day.balanceFill?.let { fill ->
+                    val barColor = if (fill.isPositive) balanceColors.positive else balanceColors.negative
+                    val position = Offset(x(day.x) - barWidth / 2, y(fill.topY))
+                    val barSize = Size(barWidth, y(fill.bottomY) - y(fill.topY))
+                    drawRect(barColor.copy(alpha = 0.35f), position, barSize)
+                    if (fill.isEstimated) drawRect(barColor, position, barSize,
+                        style = Stroke(lineWidth, pathEffect = dash))
                 } }
                 fun line(color: Color, value: (DashboardChartDay) -> Double?, estimated: (DashboardChartDay) -> Boolean,
-                    dotted: Boolean = false, origin: Boolean = false, markers: Boolean = true) {
+                    dotted: Boolean = false, origin: Boolean = false, markers: Boolean = true, square: Boolean = false) {
                     if (origin) {
                         val start = Offset(x(chart.periodStartX), y(chart.periodStartY))
                         val baselineEstimated = chart.baseline?.source is DisplayValue.Interpolated
@@ -150,7 +145,13 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                                 pathEffect = if (dotted) dots else if (estimated(day) || estimated(previous)) dash else null)
                         } }
                         if (markers) {
-                            if (estimated(day)) drawCircle(color, 2.5.dp.toPx(), point, style = Stroke(lineWidth))
+                            if (square) {
+                                val radius = 3.dp.toPx()
+                                val position = Offset(point.x - radius, point.y - radius)
+                                val markerSize = Size(radius * 2, radius * 2)
+                                if (estimated(day)) drawRect(color, position, markerSize, style = Stroke(lineWidth))
+                                else drawRect(color, position, markerSize)
+                            } else if (estimated(day)) drawCircle(color, 2.5.dp.toPx(), point, style = Stroke(lineWidth))
                             else drawCircle(color, 2.dp.toPx(), point)
                         }
                     } }
@@ -160,6 +161,8 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                         chart.baseline?.source is DisplayValue.Interpolated }, origin = true)
                 line(weightColor, { it.weightY }, { it.weight?.display is DisplayValue.Interpolated })
                 line(averageColor, { it.movingAverageY }, { it.weight?.movingAverage?.hasInsufficientDays == true }, dotted = true, markers = false)
+                line(burnedColor, { it.burnedY }, { it.daily?.source?.burned is DisplayValue.Interpolated }, square = true)
+                line(intakeColor, { it.intakeY }, { it.daily?.source?.intake is DisplayValue.Interpolated })
             }
         }
         ChartAxis(rightLabels, Modifier.width(rightWidth))

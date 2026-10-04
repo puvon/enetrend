@@ -74,7 +74,7 @@ class DashboardChartTest {
         close(-14300.0 / 7000, chart.weightScale?.min)
         close(14300.0 / 7000, chart.weightScale?.max)
         close(0.5, chart.periodStartY)
-        close(-20000.0, chart.dailyScale.min)
+        close(0.0, chart.dailyScale.min)
         assertTrue(chart.days.all { it.weightY == null })
     }
 
@@ -83,14 +83,17 @@ class DashboardChartTest {
         val default = DashboardChartProjector.project(input)
         val changed = DashboardChartProjector.project(input, 3500.0)
         assertEquals(default.dailyScale, changed.dailyScale)
-        close(-400.0, default.dailyScale.min)
+        close(0.0, default.dailyScale.min)
+        close(20000.0, default.dailyScale.max)
         close(70.0 - 9000.0 / 3500.0, changed.weightScale?.min)
         assertEquals(default.days.map { it.periodCumulative }, changed.days.map { it.periodCumulative })
     }
 
     @Test fun missingDailyKeepsReferenceCumulativeCoordinates() {
         val chart = DashboardChartProjector.project(data(listOf(-300.0, null, 200.0)))
-        assertNull(chart.days[1].dailyY)
+        assertNull(chart.days[1].intakeY)
+        assertNotNull(chart.days[1].burnedY)
+        assertNull(chart.days[1].balanceFill)
         close(chart.days[0].periodCumulativeY!!, chart.days[1].periodCumulativeY)
         assertNotNull(chart.days[2].periodCumulativeY)
         close(-100.0, chart.days[2].periodCumulative?.availableDaysSubtotalKilocalories)
@@ -100,7 +103,8 @@ class DashboardChartTest {
     @Test fun emptyDataKeepsDatesAndNullCoordinates() {
         val chart = DashboardChartProjector.project(DashboardData(CalorieBalanceSeries(range(2), emptyList(), emptyList()), emptyList(), false))
         assertEquals(2, chart.days.size)
-        assertTrue(chart.days.all { it.dailyY == null && it.periodCumulativeY == null && it.weightY == null && it.movingAverageY == null })
+        assertTrue(chart.days.all { it.intakeY == null && it.burnedY == null && it.balanceFill == null &&
+            it.periodCumulativeY == null && it.weightY == null && it.movingAverageY == null })
         assertTrue(chart.periodStartY.isFinite())
         assertFalse(chart.hasPeriodCumulative)
         assertNull(chart.weightScale)
@@ -109,17 +113,21 @@ class DashboardChartTest {
     @Test fun singleZeroDayAndConstantWeightHaveFiniteCoordinates() {
         val chart = DashboardChartProjector.project(data(listOf(0.0), listOf(weight(0, DisplayValue.Recorded(70.0), 70.0))))
         close(0.5, chart.days.single().x)
-        close(chart.dailyZeroY, chart.days.single().dailyY)
+        close(requireNotNull(chart.days.single().intakeY), chart.days.single().burnedY)
+        assertNull(chart.days.single().balanceFill)
         close(chart.periodStartY, chart.days.single().periodCumulativeY)
         close(0.5, chart.days.single().weightY)
         close(0.5, chart.days.single().movingAverageY)
     }
 
-    @Test fun positiveIsAboveZeroAndNegativeBelow() {
+    @Test fun intakeIsAboveConsumptionForSurplusAndBelowForDeficit() {
         val chart = DashboardChartProjector.project(data(listOf(-300.0, 600.0, 0.0)))
-        assertTrue(chart.days[0].dailyY!! > chart.dailyZeroY)
-        assertTrue(chart.days[1].dailyY!! < chart.dailyZeroY)
-        close(chart.dailyZeroY, chart.days[2].dailyY)
+        assertTrue(requireNotNull(chart.days[0].intakeY) > requireNotNull(chart.days[0].burnedY))
+        assertFalse(requireNotNull(chart.days[0].balanceFill).isPositive)
+        assertTrue(requireNotNull(chart.days[1].intakeY) < requireNotNull(chart.days[1].burnedY))
+        assertTrue(requireNotNull(chart.days[1].balanceFill).isPositive)
+        close(requireNotNull(chart.days[2].intakeY), chart.days[2].burnedY)
+        assertNull(chart.days[2].balanceFill)
     }
 
     @Test fun averageWithoutInRangeWeightCentersAxisAndCumulative() {
@@ -153,23 +161,66 @@ class DashboardChartTest {
         val balances = CalorieBalanceCalculator.calculate(calories)
         val chart = DashboardChartProjector.project(DashboardData(balances, emptyList(), false))
         assertTrue(chart.days[1].daily!!.isEstimated)
+        assertTrue(requireNotNull(chart.days[1].balanceFill).isEstimated)
+        close(chart.dailyScale.y(200.0), chart.days[1].burnedY)
         assertTrue(chart.days[1].periodCumulative!!.isEstimated)
         close(chart.periodStartY, chart.days.first().periodCumulativeY)
         assertTrue(chart.days.all { it.periodCumulativeY != null })
         assertTrue(chart.periodStartY.isFinite())
     }
 
-    @Test fun dailyTicksAreSymmetricNiceIntegersAndContainAllValues() {
-        for (values in listOf(emptyList(), listOf(0.0), listOf(0.1), listOf(-0.1),
-            listOf(-713.5, 25.0), listOf(30000.0))) {
+    @Test fun calorieTicksStartAtZeroAndContainAllValuesWithNiceIntegers() {
+        for (values in listOf(emptyList(), listOf(0.0), listOf(0.1),
+            listOf(713.5, 25.0), listOf(30000.0))) {
             val scale = ChartScale.daily(values)
-            close(0.5, scale.y(0.0))
-            close(-scale.min, scale.max)
+            close(1.0, scale.y(0.0))
+            close(0.0, scale.min)
             val step = (scale.max - scale.min) / 4
             assertTrue(step >= 5.0)
             close(0.0, step % 5)
             values.forEach { assertTrue(scale.y(it) in 0.0..1.0) }
         }
+    }
+
+    @Test fun fillsJoinTheTwoActualValuesWithoutRoundingOrZeroBaseline() {
+        val totals = listOf(CalorieTotals(2400.0, 2000.0), CalorieTotals(1800.0, 2200.0),
+            CalorieTotals(0.0, 2000.0), CalorieTotals(2000.001, 2000.0), CalorieTotals(0.0, 0.0))
+        val calories = DailyCalorieData(range(totals.size), totals.mapIndexed { i, value ->
+            start.plusDays(i.toLong()) to value
+        }.toMap())
+        val input = DashboardData(CalorieBalanceCalculator.calculate(calories), emptyList(), false)
+        val chart = DashboardChartProjector.project(input)
+        for (i in 0..3) {
+            val day = chart.days[i]
+            val fill = requireNotNull(day.balanceFill)
+            val intake = requireNotNull(totals[i].intakeKilocalories)
+            val burned = requireNotNull(totals[i].burnedKilocalories)
+            close(chart.dailyScale.y(maxOf(intake, burned)), fill.topY)
+            close(chart.dailyScale.y(minOf(intake, burned)), fill.bottomY)
+            assertEquals(intake > burned, fill.isPositive)
+            assertFalse(fill.isEstimated)
+            assertSame(input.balances.daily[i], day.daily)
+            assertSame(input.balances.periodCumulative[i], day.periodCumulative)
+        }
+        close(1.0, chart.days[4].intakeY)
+        close(1.0, chart.days[4].burnedY)
+        assertNull(chart.days[4].balanceFill)
+    }
+
+    @Test fun intakeOnlyConsumptionOnlyAndLongGapsKeepIndependentCoordinates() {
+        val calories = DailyCalorieData(range(10), mapOf(
+            start to CalorieTotals(3000.0, null), start.plusDays(1) to CalorieTotals(null, 4000.0),
+            start.plusDays(9) to CalorieTotals(2000.0, 2500.0)))
+        val chart = DashboardChartProjector.project(DashboardData(
+            CalorieBalanceCalculator.calculate(calories), emptyList(), false))
+        assertNotNull(chart.days[0].intakeY)
+        assertNull(chart.days[0].burnedY)
+        assertNull(chart.days[0].balanceFill)
+        assertNull(chart.days[1].intakeY)
+        close(chart.dailyScale.y(4000.0), chart.days[1].burnedY)
+        assertNull(chart.days[1].balanceFill)
+        assertTrue(chart.days.subList(2, 9).all { it.intakeY == null && it.burnedY == null && it.balanceFill == null })
+        assertTrue(chart.dailyScale.max >= 4000.0)
     }
 
     @Test fun rejectsInvalidCoefficients() {

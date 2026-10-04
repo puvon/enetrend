@@ -10,11 +10,24 @@ data class DashboardChartDay(
     val daily: DailyCalorieBalance?,
     val periodCumulative: PeriodCumulativeCalorieBalance?,
     val weight: DailyWeightTrend?,
-    val dailyY: Double?,
+    val intakeY: Double?,
+    val burnedY: Double?,
+    val balanceFill: ChartBalanceFill?,
     val periodCumulativeY: Double?,
     val weightY: Double?,
     val movingAverageY: Double?,
 )
+
+data class ChartBalanceFill(
+    val topY: Double,
+    val bottomY: Double,
+    val isPositive: Boolean,
+    val isEstimated: Boolean,
+) {
+    companion object {
+        const val DAY_WIDTH_FRACTION = 0.4
+    }
+}
 
 /** The source remains available so a baseline taken from interpolation can be labelled. */
 data class ChartWeightBaseline(val date: LocalDate, val source: DisplayValue, val kilograms: Double,
@@ -35,11 +48,11 @@ data class ChartScale(val min: Double, val max: Double) {
         }
 
         internal fun daily(values: List<Double>): ChartScale {
-            val requiredStep = (values.maxOfOrNull { kotlin.math.abs(it) } ?: 0.0) / 2
+            val requiredStep = (values.maxOrNull() ?: 0.0) / 4
             val magnitude = Math.pow(10.0, kotlin.math.floor(kotlin.math.log10(requiredStep.coerceAtLeast(5.0))))
             val step = listOf(1.0, 2.0, 5.0, 10.0).map { it * magnitude }
                 .first { it >= requiredStep && it >= 5.0 }
-            return ChartScale(-2 * step, 2 * step)
+            return ChartScale(0.0, 4 * step)
         }
 
         internal fun covering(values: List<Double>, includeZero: Boolean): ChartScale {
@@ -91,7 +104,9 @@ object DashboardChartProjector {
             ChartWeightBaseline(it.date, it.display, requireNotNull(it.display.number() ?: it.movingAverage.kilograms),
                 isMovingAverage = it.display.number() == null)
         }
-        val dailyScale = ChartScale.daily(daily.values.mapNotNull { it.kilocalories })
+        val dailyScale = ChartScale.daily(daily.values.flatMap {
+            listOfNotNull(it.source.intake.number(), it.source.burned.number())
+        })
         fun cumulativePosition(value: Double): Double =
             (baseline?.kilograms ?: 0.0) + value / kilocaloriesPerKilogram
         val cumulativeValues = cumulative.values.mapNotNull { it.kilocalories }.map(::cumulativePosition)
@@ -103,9 +118,17 @@ object DashboardChartProjector {
             val day = daily[date]
             val period = cumulative[date]
             val weight = weights[date]
+            val intakeY = day?.source?.intake?.number()?.let(dailyScale::y)
+            val burnedY = day?.source?.burned?.number()?.let(dailyScale::y)
+            // A null balance also covers intentionally excluded days (today's missing/zero intake).
+            val balanceFill = day?.kilocalories?.takeIf { it != 0.0 }?.let { balance ->
+                if (intakeY == null || burnedY == null) null else ChartBalanceFill(
+                    minOf(intakeY, burnedY), maxOf(intakeY, burnedY), balance > 0.0, day.isEstimated,
+                )
+            }
             DashboardChartDay(
                 date, (i + 0.5) / dates.size, day, period, weight,
-                day?.kilocalories?.let(dailyScale::y),
+                intakeY, burnedY, balanceFill,
                 period?.kilocalories?.let { cumulativeScale.y(cumulativePosition(it)) },
                 weight?.display?.number()?.let { requireNotNull(weightScale).y(it) },
                 weight?.movingAverage?.kilograms?.let { requireNotNull(weightScale).y(it) },

@@ -68,6 +68,7 @@ class DashboardScreenTest {
         var lineColors = emptyList<Color>()
         compose.setContent { EnetrendTheme {
             lineColors = listOf(MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.onSurface, MaterialTheme.colorScheme.secondary,
+                MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.onSurfaceVariant,
                 LocalBalanceColors.current.positive.copy(alpha = 0.35f).compositeOver(MaterialTheme.colorScheme.background),
                 LocalBalanceColors.current.negative.copy(alpha = 0.35f).compositeOver(MaterialTheme.colorScheme.background))
             DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
@@ -171,9 +172,10 @@ class DashboardScreenTest {
         } }
         compose.onNodeWithText("EneTrend").assertDoesNotExist()
         compose.onNodeWithText("収支 = 摂取", substring = true).assertDoesNotExist()
-        compose.onNodeWithText("■ 日別カロリー収支").assertDoesNotExist()
+        compose.onNodeWithText("● 摂取カロリー").assertDoesNotExist()
         compose.onNodeWithText("凡例を開く").performScrollTo().performClick()
-        compose.onNodeWithText("■ 日別カロリー収支").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("● 摂取カロリー").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("■ 消費カロリー").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("━ 期間累積収支").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("期間開始（2026-09-08）：0.0 kcal").assertDoesNotExist()
         compose.onNodeWithContentDescription("期間累積収支の参考情報").performScrollTo().performClick()
@@ -184,8 +186,8 @@ class DashboardScreenTest {
         compose.onNodeWithText("算出可能日の小計：", substring = true).assertDoesNotExist()
         compose.onNodeWithText("体重：欠測").performScrollTo().assertIsDisplayed()
         compose.onNodeWithText("凡例を閉じる").performScrollTo().performClick()
-        compose.onNodeWithText("■ 日別カロリー収支").assertDoesNotExist()
-        compose.onNodeWithText("日別 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("● 摂取カロリー").assertDoesNotExist()
+        compose.onNodeWithText("摂取・消費 kcal").performScrollTo().assertIsDisplayed()
     }
 
     @Test fun accessFailureOffersRetry() {

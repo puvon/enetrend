@@ -27,8 +27,7 @@ data class DashboardData(
 ) {
     // Chart visibility is independent of the today card.
     val hasData: Boolean get() = balances.daily.any {
-        (it.date != today?.date || today?.includesTodayBalance == true) &&
-            (it.source.intake != DisplayValue.Missing || it.source.burned != DisplayValue.Missing)
+        it.source.intake != DisplayValue.Missing || it.source.burned != DisplayValue.Missing
     } || weights.any { it.display != DisplayValue.Missing || it.movingAverage.kilograms != null }
 }
 

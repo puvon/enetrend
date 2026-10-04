@@ -99,7 +99,7 @@ class DashboardQualityTest {
     @Test fun enlargedTextAndLargeCumulativeKeepAxisLabelsAndControlsReadable() {
         val range = range(30)
         show(range, range.days().associate { it.date to CalorieTotals(600.0, 2000.0) }, listOf(record(0), record(29)), 2f)
-        val axis = compose.onNodeWithText("-2000")
+        val axis = compose.onNodeWithText("2000")
         axis.performScrollTo().assertIsDisplayed()
         val layouts = mutableListOf<TextLayoutResult>()
         axis.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(layouts) }

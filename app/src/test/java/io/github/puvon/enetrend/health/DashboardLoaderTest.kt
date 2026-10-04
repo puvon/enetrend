@@ -210,12 +210,15 @@ class DashboardLoaderTest {
                 if (day.date == today && intake != 1200.0) {
                     assertNull(day.periodCumulative)
                     assertNull(day.periodCumulativeY)
-                    assertNull(day.dailyY)
+                    assertNull(day.balanceFill)
                 } else assertEquals(day.date, day.periodCumulative?.date)
                 assertEquals(day.date, day.weight?.date)
             }
             assertNotNull(chart.days.last().weightY)
             assertNotNull(chart.days.last().movingAverageY)
+            assertNotNull(chart.days.last().burnedY)
+            if (intake == null) assertNull(chart.days.last().intakeY)
+            else assertEquals(chart.dailyScale.y(intake), requireNotNull(chart.days.last().intakeY), 1e-9)
             assertEquals(1300.0, requireNotNull(data.today).calorieSummary.intakeAllowanceKilocalories!!, 1e-9)
         }
     }
@@ -268,15 +271,19 @@ class DashboardLoaderTest {
         assertEquals(source.ranges.size, source.ranges.distinct().size)
     }
 
-    @Test fun trendCanBeEmptyWhileTodayHasConsumption() = runBlocking {
+    @Test fun todaysConsumptionAloneProducesChartWithoutInventingIntakeOrBalances() = runBlocking {
         val source = Source().apply {
             read = { if (it.startDate == today) CalorieTotals(null, 900.0) else CalorieTotals(null, null) }
         }
         val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7, MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
-        assertFalse(data.hasData)
+        assertTrue(data.hasData)
         assertTrue(requireNotNull(data.today).hasData)
         assertFalse(requireNotNull(data.today).previousSevenDays.hasRecordedData)
         assertTrue(data.balances.daily.all { it.kilocalories == null })
+        val chart = DashboardChartProjector.project(data)
+        assertNotNull(chart.days.last().burnedY)
+        assertNull(chart.days.last().intakeY)
+        assertTrue(chart.days.all { it.balanceFill == null && it.periodCumulativeY == null })
     }
 
     @Test fun todaysWeightCanInterpolateYesterdayButUnreportedIntakeStillExcludesConsumptionAnchor() = runBlocking {
@@ -310,7 +317,7 @@ class DashboardLoaderTest {
         assertEquals(7, chart.days.size)
         assertNotNull(chart.days.last().weightY)
         assertNotNull(chart.days.last().movingAverageY)
-        assertTrue(chart.days.all { it.dailyY == null && it.periodCumulativeY == null })
+        assertTrue(chart.days.all { it.intakeY == null && it.burnedY == null && it.balanceFill == null && it.periodCumulativeY == null })
     }
 
     @Test fun yesterdayZeroIsCalculatedNormallyWhileTodaysZeroIsSuppressedForAllPeriods() = runBlocking {

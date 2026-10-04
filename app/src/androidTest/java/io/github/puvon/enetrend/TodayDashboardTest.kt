@@ -151,6 +151,22 @@ class TodayDashboardTest {
         }
     }
 
+    @Test fun todaysConsumptionAndZeroIntakeAppearWithoutInventedBalances() {
+        val source = Source(date).apply { history = CalorieTotals(null, null) }
+        route(source)
+        waitForPlot()
+        for (intake in listOf(null, 0.0, 1800.0, null)) {
+            source.current = CalorieTotals(intake, 1600.0)
+            retry()
+            val description = plot().performScrollTo().fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+            assertTrue(description.contains("摂取：${if (intake == null) "欠測" else "${intake} kcal"}"))
+            assertTrue(description.contains("消費：1600.0 kcal"))
+            assertTrue(description.contains("日別収支：${if (intake == 1800.0) "200.0 kcal" else "未算出"}"))
+            if (intake != 1800.0) assertTrue(description.contains("期間累積収支：未算出"))
+            compose.onNodeWithText("この期間に表示できるデータがありません。").assertDoesNotExist()
+        }
+    }
+
     @Test fun todayCardRemainsVisibleWhenTrendAndThenAllCaloriesAreEmpty() {
         var current by mutableStateOf(CalorieTotals(null, 1600.0))
         val range = HealthDataRange(date.minusDays(7), date, zone)

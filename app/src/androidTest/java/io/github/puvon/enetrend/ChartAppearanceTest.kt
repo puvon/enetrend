@@ -14,6 +14,9 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.semantics.SemanticsProperties
 import io.github.puvon.enetrend.health.*
 import io.github.puvon.enetrend.ui.*
@@ -50,7 +53,7 @@ class ChartAppearanceTest {
         compose.runOnIdle { assertEquals(2, selected) }
         compose.onNodeWithText("凡例を閉じる").performScrollTo().performClick()
         compose.onNodeWithText("● 体重").assertDoesNotExist()
-        compose.onNodeWithText("日別 kcal").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("摂取・消費 kcal").performScrollTo().assertIsDisplayed()
     }
     private val start = LocalDate.of(2026, 9, 1)
     private val range = HealthDataRange(start, start.plusDays(3), ZoneId.of("Asia/Tokyo"))
@@ -70,15 +73,18 @@ class ChartAppearanceTest {
         return count
     }
 
-    @Test fun signedBarsStayWarmAndCoolInBothThemes() {
+    @Test fun differenceFillsStayBetweenPointsAtFortyPercentWidthInBothThemes() {
         var dark by mutableStateOf(false)
         var warm = Color.Transparent
         var cool = Color.Transparent
+        var inset = 0f
+        val chart = chart()
         compose.setContent { EnetrendTheme(darkTheme = dark) {
+            inset = rememberTextMeasurer().measure("0", MaterialTheme.typography.labelSmall).size.height / 2f
             val colors = LocalBalanceColors.current
             warm = colors.positive.copy(alpha = .35f).compositeOver(MaterialTheme.colorScheme.surface)
             cool = colors.negative.copy(alpha = .35f).compositeOver(MaterialTheme.colorScheme.surface)
-            Surface { Column { DashboardChart(chart(), 2, {}) } }
+            Surface { Column { DashboardChart(chart, 2, {}) } }
         } }
         for (mode in listOf(false, true)) {
             compose.runOnIdle { dark = mode }
@@ -87,6 +93,85 @@ class ChartAppearanceTest {
             assertTrue(count(image, cool) > 100)
             assertTrue(warm.red > warm.blue)
             assertTrue(cool.blue > cool.red)
+            val width = image.width - 2 * inset
+            val height = image.height - 2 * inset
+            for ((index, color) in listOf(0 to warm, 1 to cool)) {
+                val fill = requireNotNull(chart.days[index].balanceFill)
+                // Other series cross the fill and their antialiased edges can share its color.
+                // Use solid patches wider than a line stroke to identify the filled rectangle.
+                val xs = mutableSetOf<Int>()
+                val ys = mutableSetOf<Int>()
+                for (y in 3 until image.height - 3) for (x in 3 until image.width - 3) {
+                    if (matches(image[x, y], color) && (-3..3).all { dy ->
+                        (-3..3).all { dx -> matches(image[x + dx, y + dy], color) }
+                    }) { xs.add(x); ys.add(y) }
+                }
+                assertTrue("The difference must be filled between the two values", xs.isNotEmpty())
+                val center = inset + width * chart.days[index].x
+                val halfWidth = width / 3 * .4 / 2
+                assertEquals(center - halfWidth + 3, xs.min().toDouble(), 2.0)
+                assertEquals(center + halfWidth - 3, xs.max().toDouble(), 2.0)
+                assertEquals(inset + height * fill.topY + 3, ys.min().toDouble(), 3.0)
+                assertEquals(inset + height * fill.bottomY - 3, ys.max().toDouble(), 3.0)
+                val below = (inset + height * (fill.bottomY + 1.0) / 2).toInt()
+                assertFalse("The fill must not extend down to zero", matches(image[center.toInt(), below], color))
+            }
+            assertNull(chart.days[2].balanceFill)
+        }
+    }
+
+    private fun matches(pixel: Color, color: Color) = kotlin.math.abs(pixel.red - color.red) < .02 &&
+        kotlin.math.abs(pixel.green - color.green) < .02 && kotlin.math.abs(pixel.blue - color.blue) < .02
+
+    @Test fun calorieLinesBreakAtMissingDaysAndKeepIsolatedMarkers() {
+        val base = chart()
+        var continuous by mutableStateOf(false)
+        var intake = Color.Transparent
+        var burned = Color.Transparent
+        compose.setContent { EnetrendTheme(dynamicColor = false) {
+            intake = MaterialTheme.colorScheme.primary
+            burned = MaterialTheme.colorScheme.onSurfaceVariant
+            val days = base.days.mapIndexed { index, day -> day.copy(
+                intakeY = if (index == 1 && !continuous) null else .3,
+                burnedY = if (index == 1 && !continuous) null else .7,
+                balanceFill = null, periodCumulativeY = null,
+            ) }
+            Surface { Column { DashboardChart(base.copy(days = days), 2, {}) } }
+        } }
+        val isolated = pixels()
+        assertTrue(count(isolated, intake) > 0)
+        val intakeCount = count(isolated, intake)
+        val burnedCount = count(isolated, burned)
+        for (y in isolated.height / 4 until isolated.height * 3 / 4) {
+            assertFalse("Neither series should bridge the missing day", matches(isolated[isolated.width / 2, y], intake) ||
+                matches(isolated[isolated.width / 2, y], burned))
+        }
+        compose.runOnIdle { continuous = true }
+        assertTrue(count(pixels(), intake) > intakeCount + 20)
+        assertTrue(count(pixels(), burned) > burnedCount + 20)
+    }
+
+    @Test fun enlargedLegendAndGraphRemainAccessibleInBothThemes() {
+        var dark by mutableStateOf(false)
+        compose.setContent {
+            CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density, 2f)) {
+                EnetrendTheme(darkTheme = dark) {
+                    Column(Modifier.verticalScroll(rememberScrollState())) { DashboardChart(chart(), 1, {}) }
+                }
+            }
+        }
+        compose.onNodeWithText("凡例を開く").performClick()
+        for (mode in listOf(false, true)) {
+            compose.runOnIdle { dark = mode }
+            compose.onNodeWithText("● 摂取カロリー").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("■ 消費カロリー").performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("2点間の塗りが日別収支", substring = true).performScrollTo().assertIsDisplayed()
+            compose.onNodeWithText("摂取・消費 kcal").performScrollTo().assertIsDisplayed()
+            val graph = compose.onNodeWithContentDescription("統合グラフ。", substring = true).performScrollTo()
+            val description = graph.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+            assertTrue(description.contains("摂取：1700.0 kcal"))
+            assertTrue(description.contains("消費：2000.0 kcal"))
+            assertTrue(description.contains("日別収支：-300.0 kcal"))
         }
     }
 
