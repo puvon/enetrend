@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -91,6 +92,20 @@ fun DashboardScreen(
 ) {
     // Keep the date through loading and restoration; changing display length starts at the latest day.
     var selectedDate by rememberSaveable(displayDays) { mutableStateOf<String?>(null) }
+    val preferences = LocalContext.current.applicationContext.getSharedPreferences(
+        GRAPH_VISIBILITY_PREFERENCES, android.content.Context.MODE_PRIVATE,
+    )
+    var visibleGraphGroups by rememberSaveable {
+        mutableIntStateOf(preferences.getInt(GRAPH_VISIBILITY_KEY, ALL_GRAPH_GROUPS))
+    }
+    fun toggleGraphGroup(group: Int) {
+        visibleGraphGroups = visibleGraphGroups xor group
+        preferences.edit().putInt(GRAPH_VISIBILITY_KEY, visibleGraphGroups).apply()
+    }
+    val graphControls: @Composable () -> Unit = {
+        PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod,
+            visibleGraphGroups, ::toggleGraphGroup)
+    }
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         ScreenWithBottomActions(Modifier.fillMaxSize().padding(padding), 16.dp, 12.dp, actions = {
                 TextButton(onClick = onRetry) { Text("再確認") }
@@ -111,10 +126,10 @@ fun DashboardScreen(
                     HealthDataResult.Error -> "データを取得できませんでした。再確認でやり直してください。"
                 })
                 is DashboardState.Ready -> DashboardContent(state.data, selectedDate, { selectedDate = it }) {
-                    PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
+                    graphControls()
                 }
             }
-            if (state !is DashboardState.Ready) PeriodControls(displayDays, averagePeriod, onDisplayDays, onAveragePeriod)
+            if (state !is DashboardState.Ready) graphControls()
         }
     }
 }
@@ -172,9 +187,23 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     Text("記録がある日も記録漏れがないとは限りません。参考累積は欠測日も前日値を維持します。体重・移動平均の欠測は線でつなぎません。移動平均は取得できた実測値のみを使用します。")
 }
 
+private const val GRAPH_VISIBILITY_PREFERENCES = "graph_visibility"
+private const val GRAPH_VISIBILITY_KEY = "visible_groups"
+private const val WEIGHT_GRAPH_GROUP = 1
+private const val CALORIE_GRAPH_GROUP = 2
+private const val CUMULATIVE_GRAPH_GROUP = 4
+private const val ALL_GRAPH_GROUPS = WEIGHT_GRAPH_GROUP or CALORIE_GRAPH_GROUP or CUMULATIVE_GRAPH_GROUP
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-private fun PeriodControls(displayDays: Int, averagePeriod: MovingAveragePeriod, onDisplayDays: (Int) -> Unit, onAveragePeriod: (MovingAveragePeriod) -> Unit) {
+private fun PeriodControls(
+    displayDays: Int,
+    averagePeriod: MovingAveragePeriod,
+    onDisplayDays: (Int) -> Unit,
+    onAveragePeriod: (MovingAveragePeriod) -> Unit,
+    visibleGraphGroups: Int,
+    onToggleGraphGroup: (Int) -> Unit,
+) {
     Text("表示期間")
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         listOf(7, 14, 30).forEach { days ->
@@ -187,6 +216,42 @@ private fun PeriodControls(displayDays: Int, averagePeriod: MovingAveragePeriod,
         MovingAveragePeriod.entries.forEach { period ->
             FilterChip(selected = period == averagePeriod, onClick = { onAveragePeriod(period) },
                 label = { Text("${period.days}日平均") })
+        }
+    }
+    Text("グラフの表示")
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        GraphVisibilityButton("体重", "体重と移動平均", WEIGHT_GRAPH_GROUP,
+            visibleGraphGroups, onToggleGraphGroup, Modifier.weight(1f))
+        GraphVisibilityButton("カロリー", "摂取・消費カロリーと日別収支", CALORIE_GRAPH_GROUP,
+            visibleGraphGroups, onToggleGraphGroup, Modifier.weight(1f))
+        GraphVisibilityButton("累積", "期間累積収支", CUMULATIVE_GRAPH_GROUP,
+            visibleGraphGroups, onToggleGraphGroup, Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun GraphVisibilityButton(
+    label: String,
+    groupName: String,
+    group: Int,
+    visibleGraphGroups: Int,
+    onToggle: (Int) -> Unit,
+    modifier: Modifier,
+) {
+    val visible = visibleGraphGroups and group != 0
+    val semanticsModifier = modifier.semantics {
+        contentDescription = groupName
+        stateDescription = if (visible) "表示中" else "非表示"
+    }
+    if (visible) {
+        Button(onClick = { onToggle(group) }, modifier = semanticsModifier,
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+            Text(label, maxLines = 1)
+        }
+    } else {
+        OutlinedButton(onClick = { onToggle(group) }, modifier = semanticsModifier,
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {
+            Text(label, maxLines = 1)
         }
     }
 }
