@@ -83,7 +83,7 @@ Health Connectのデータを読み取り、カロリー収支と体重変化を
 
 [GitHub Actions](https://github.com/puvon/enetrend/actions/workflows/debug-apk.yml)の成功した「Build debug APK」runを開き、Artifactsから`enetrend-debug-<commit SHA>-<run attempt>.apk`をダウンロードします。APK単体で保存するため、ZIPの展開は不要です。GitHubへのログインが必要です。変更前のrunで生成されたartifactは従来どおりZIP形式です。
 
-masterへのpush（mergeによる更新を含む）でdebug APKをビルドし、artifactを14日間保存します。期限後は対象のartifactを取得できません。GitHub Releaseへの公開は行いません。
+masterへのpush（mergeによる更新を含む）とfeature/*ブランチへのpushでdebug APKをビルドし、artifactを14日間保存します。期限後は対象のartifactを取得できません。GitHub Releaseへの公開は行いません。
 
 これはdebug版です。署名鍵はCI runnerで生成されるため、ローカル版や別runのAPKと署名が異なる場合があります。署名が異なると上書きインストールできません。必要に応じて既存のEneTrendをアンインストールしてから入れ直してください。その場合、アプリの設定・権限は再設定が必要です。
 
