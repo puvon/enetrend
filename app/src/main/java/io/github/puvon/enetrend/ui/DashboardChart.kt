@@ -33,16 +33,26 @@ import java.util.Locale
 import io.github.puvon.enetrend.ui.theme.LocalBalanceColors
 
 @Composable
-internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: (Int) -> Unit) {
+internal fun DashboardChart(
+    chart: DashboardChartData,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+    visibleGroups: Int = DashboardChartGroups.ALL,
+) {
     var legendExpanded by rememberSaveable { mutableStateOf(false) }
     val selectDay by rememberUpdatedState(onSelect)
+    val showWeight = visibleGroups and DashboardChartGroups.WEIGHT != 0
+    val showCalories = visibleGroups and DashboardChartGroups.CALORIES != 0
+    val showCumulative = visibleGroups and DashboardChartGroups.CUMULATIVE != 0
+    val showRightAxis = showWeight || showCumulative
+    val showAnySeries = showWeight || showCalories || showCumulative
     val axisStyle = MaterialTheme.typography.labelSmall
     val textMeasurer = rememberTextMeasurer()
-    val leftLabels = axisLabels(chart.dailyScale, decimals = 0)
-    val rightLabels = axisLabels(chart.weightScale)
+    val leftLabels = if (showCalories) axisLabels(chart.dailyScale, decimals = 0) else emptyList()
+    val rightLabels = if (showRightAxis) axisLabels(chart.weightScale) else emptyList()
     val density = LocalDensity.current
     fun axisWidth(labels: List<String>) = with(density) {
-        labels.maxOf { textMeasurer.measure(it, axisStyle).size.width }.toDp() + 8.dp
+        labels.maxOfOrNull { textMeasurer.measure(it, axisStyle).size.width }?.toDp()?.plus(8.dp) ?: 0.dp
     }
     val leftWidth = axisWidth(leftLabels)
     val rightWidth = axisWidth(rightLabels)
@@ -77,23 +87,35 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
         Text("2点間の塗りが日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）。0は塗りなし。", style = MaterialTheme.typography.labelSmall)
         Text("左軸は0からの摂取・消費kcal。欠測は線を切り、当日の摂取未取得は点を描きません。当日の摂取0も表示しますが、収支・累積は前日までです。", style = MaterialTheme.typography.labelSmall)
         Text("期間累積は期間開始を0とし、右軸の中央から描画します。1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
+        if (!showWeight && showCumulative) Text("体重は非表示です。累積収支は体重を基準にした換算kg軸で表示します。", style = MaterialTheme.typography.labelSmall)
         chart.baseline?.let {
             val source = if (it.isMovingAverage) "移動平均" else if (it.source is DisplayValue.Interpolated) "補間" else "実測"
             Text("右軸の中心：${it.date} ${String.format(Locale.JAPAN, "%.1f", it.kilograms)} kg（$source）", style = MaterialTheme.typography.labelSmall)
         } ?: Text("体重・移動平均なし：右軸は0中心の換算尺度です。体重の記録ではありません。", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("摂取・消費 kcal", style = MaterialTheme.typography.labelSmall)
-        Text(if (chart.baseline != null) "体重 kg" else "換算 kg（体重なし）", style = MaterialTheme.typography.labelSmall)
+        if (showCalories) Text("摂取・消費 kcal", style = MaterialTheme.typography.labelSmall)
+        if (showRightAxis) Text(when {
+            !showWeight -> "換算 kg（体重非表示）"
+            chart.baseline != null -> "体重 kg"
+            else -> "換算 kg（体重なし）"
+        }, style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth().height(240.dp)) {
-        ChartAxis(leftLabels, Modifier.width(leftWidth))
+        if (showCalories) ChartAxis(leftLabels, Modifier.width(leftWidth))
         Canvas(Modifier.weight(1f).fillMaxHeight().pointerInput(chart.range, chart.days.size, insetPx) {
             detectTapGestures { point ->
                 chartDayAt(point.x.toDouble(), size.width.toDouble(), insetPx.toDouble(), chart.days.size)?.let(selectDay)
             }
         }.semantics {
-            contentDescription = "統合グラフ。共通の日付軸に摂取カロリー（丸）・消費カロリー（四角）の線、2点間の塗りは日別収支。正は暖色、負は寒色、0は塗りなし。期間累積収支、体重、移動平均の線。タップで日付を選択。数値は日付選択の下に表示。"
+            val visibleSeries = buildList {
+                if (showWeight) add("体重と移動平均")
+                if (showCalories) add("摂取カロリー、消費カロリー、日別収支")
+                if (showCumulative) add("期間累積収支")
+            }
+            contentDescription = if (visibleSeries.isEmpty())
+                "統合グラフ。すべての系列は非表示です。タップで日付を選択。数値は日付選択の下に表示。"
+            else "統合グラフ。表示中：${visibleSeries.joinToString("、")}。タップで日付を選択。数値は日付選択の下に表示。"
             stateDescription = chart.days.getOrNull(selected)?.detailLines()?.joinToString("。") ?: "選択できる日付がありません。"
             customActions = buildList {
                 if (selected > 0) add(CustomAccessibilityAction("前の日") { selectDay(selected - 1); true })
@@ -110,15 +132,18 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
             val dash = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
             val dots = PathEffect.dashPathEffect(floatArrayOf(1.dp.toPx(), 3.dp.toPx()))
             clipRect(inset - 3.dp.toPx(), inset - 3.dp.toPx(), size.width - inset + 3.dp.toPx(), size.height - inset + 3.dp.toPx()) {
-                for (i in 0..4) drawLine(grid, Offset(x(0.0), y(i / 4.0)), Offset(x(1.0), y(i / 4.0)))
-                drawLine(dailyColor.copy(alpha = 0.6f), Offset(x(0.0), y(chart.dailyZeroY)), Offset(x(1.0), y(chart.dailyZeroY)))
-                drawLine(grid, Offset(x(0.0), y(0.0)), Offset(x(0.0), y(1.0)))
-                drawLine(grid, Offset(x(1.0), y(0.0)), Offset(x(1.0), y(1.0)))
-                chart.days.getOrNull(selected)?.let {
-                    drawLine(grid, Offset(x(it.x), y(0.0)), Offset(x(it.x), y(1.0)), lineWidth)
+                if (showAnySeries) {
+                    for (i in 0..4) drawLine(grid, Offset(x(0.0), y(i / 4.0)), Offset(x(1.0), y(i / 4.0)))
+                    if (showCalories) drawLine(dailyColor.copy(alpha = 0.6f), Offset(x(0.0), y(chart.dailyZeroY)),
+                        Offset(x(1.0), y(chart.dailyZeroY)))
+                    drawLine(grid, Offset(x(0.0), y(0.0)), Offset(x(0.0), y(1.0)))
+                    drawLine(grid, Offset(x(1.0), y(0.0)), Offset(x(1.0), y(1.0)))
+                    chart.days.getOrNull(selected)?.let {
+                        drawLine(grid, Offset(x(it.x), y(0.0)), Offset(x(it.x), y(1.0)), lineWidth)
+                    }
                 }
                 val barWidth = (plotWidth / chart.days.size.coerceAtLeast(1) * ChartBalanceFill.DAY_WIDTH_FRACTION).toFloat()
-                chart.days.forEach { day -> day.balanceFill?.let { fill ->
+                if (showCalories) chart.days.forEach { day -> day.balanceFill?.let { fill ->
                     val barColor = if (fill.isPositive) balanceColors.positive else balanceColors.negative
                     val position = Offset(x(day.x) - barWidth / 2, y(fill.topY))
                     val barSize = Size(barWidth, y(fill.bottomY) - y(fill.topY))
@@ -156,23 +181,30 @@ internal fun DashboardChart(chart: DashboardChartData, selected: Int, onSelect: 
                         }
                     } }
                 }
-                if (chart.hasPeriodCumulative) line(cumulativeColor, { it.periodCumulativeY },
+                if (showCumulative && chart.hasPeriodCumulative) line(cumulativeColor, { it.periodCumulativeY },
                     { it.periodCumulative?.isEstimated == true || it.periodCumulative?.isComplete == false ||
                         chart.baseline?.source is DisplayValue.Interpolated }, origin = true)
-                line(weightColor, { it.weightY }, { it.weight?.display is DisplayValue.Interpolated })
-                line(averageColor, { it.movingAverageY }, { it.weight?.movingAverage?.hasInsufficientDays == true }, dotted = true, markers = false)
-                line(burnedColor, { it.burnedY }, { it.daily?.source?.burned is DisplayValue.Interpolated }, square = true)
-                line(intakeColor, { it.intakeY }, { it.daily?.source?.intake is DisplayValue.Interpolated })
+                if (showWeight) {
+                    line(weightColor, { it.weightY }, { it.weight?.display is DisplayValue.Interpolated })
+                    line(averageColor, { it.movingAverageY },
+                        { it.weight?.movingAverage?.hasInsufficientDays == true }, dotted = true, markers = false)
+                }
+                if (showCalories) {
+                    line(burnedColor, { it.burnedY }, { it.daily?.source?.burned is DisplayValue.Interpolated }, square = true)
+                    line(intakeColor, { it.intakeY }, { it.daily?.source?.intake is DisplayValue.Interpolated })
+                }
             }
         }
-        ChartAxis(rightLabels, Modifier.width(rightWidth))
+        if (showRightAxis) ChartAxis(rightLabels, Modifier.width(rightWidth))
     }
-    Row(Modifier.fillMaxWidth().padding(start = leftWidth + plotInset, end = rightWidth + plotInset), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text("${chart.range.startDate.monthValue}/${chart.range.startDate.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
-        val last = chart.range.endDateExclusive.minusDays(1)
-        Text("${last.monthValue}/${last.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
-    }
-    if (!chart.hasPeriodCumulative) Text("期間累積収支：算出できる日がありません。", style = MaterialTheme.typography.labelMedium)
+    if (showAnySeries) Row(Modifier.fillMaxWidth().padding(start = leftWidth + plotInset, end = rightWidth + plotInset),
+        horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("${chart.range.startDate.monthValue}/${chart.range.startDate.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
+            val last = chart.range.endDateExclusive.minusDays(1)
+            Text("${last.monthValue}/${last.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
+        }
+    if (showCumulative && !chart.hasPeriodCumulative)
+        Text("期間累積収支：算出できる日がありません。", style = MaterialTheme.typography.labelMedium)
 }
 
 @Composable

@@ -96,7 +96,7 @@ fun DashboardScreen(
         GRAPH_VISIBILITY_PREFERENCES, android.content.Context.MODE_PRIVATE,
     )
     var visibleGraphGroups by rememberSaveable {
-        mutableIntStateOf(preferences.getInt(GRAPH_VISIBILITY_KEY, ALL_GRAPH_GROUPS))
+        mutableIntStateOf(preferences.getInt(GRAPH_VISIBILITY_KEY, DashboardChartGroups.ALL))
     }
     fun toggleGraphGroup(group: Int) {
         visibleGraphGroups = visibleGraphGroups xor group
@@ -125,7 +125,7 @@ fun DashboardScreen(
                     HealthDataResult.AccessDenied -> "データへのアクセスが制限されています。権限と読み取り可能な期間を確認してください。"
                     HealthDataResult.Error -> "データを取得できませんでした。再確認でやり直してください。"
                 })
-                is DashboardState.Ready -> DashboardContent(state.data, selectedDate, { selectedDate = it }) {
+                is DashboardState.Ready -> DashboardContent(state.data, selectedDate, { selectedDate = it }, visibleGraphGroups) {
                     graphControls()
                 }
             }
@@ -136,7 +136,7 @@ fun DashboardScreen(
 
 @Composable
 private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelectedDate: (String) -> Unit,
-    controls: @Composable () -> Unit) {
+    visibleGraphGroups: Int, controls: @Composable () -> Unit) {
     val chart = remember(data) { DashboardChartProjector.project(data) }
     val days = chart.days
     val range = data.balances.range
@@ -163,7 +163,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     }
 
     val selected = days.indexOfFirst { it.date.toString() == resolvedDate }.takeIf { it >= 0 } ?: days.lastIndex
-    DashboardChart(chart, selected) { onSelectedDate(days[it].date.toString()) }
+    DashboardChart(chart, selected, { onSelectedDate(days[it].date.toString()) }, visibleGraphGroups)
     controls()
     if (data.balances.daily.none { it.source.intake != DisplayValue.Missing })
         Text("この期間の摂取カロリーは欠測です。記録元のアプリで記録・連携を確認してください。0 kcalとしては扱いません。")
@@ -189,11 +189,6 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
 
 private const val GRAPH_VISIBILITY_PREFERENCES = "graph_visibility"
 private const val GRAPH_VISIBILITY_KEY = "visible_groups"
-private const val WEIGHT_GRAPH_GROUP = 1
-private const val CALORIE_GRAPH_GROUP = 2
-private const val CUMULATIVE_GRAPH_GROUP = 4
-private const val ALL_GRAPH_GROUPS = WEIGHT_GRAPH_GROUP or CALORIE_GRAPH_GROUP or CUMULATIVE_GRAPH_GROUP
-
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 private fun PeriodControls(
@@ -220,11 +215,11 @@ private fun PeriodControls(
     }
     Text("グラフの表示")
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        GraphVisibilityButton("体重", "体重と移動平均", WEIGHT_GRAPH_GROUP,
+        GraphVisibilityButton("体重", "体重と移動平均", DashboardChartGroups.WEIGHT,
             visibleGraphGroups, onToggleGraphGroup, Modifier.weight(1f))
-        GraphVisibilityButton("カロリー", "摂取・消費カロリーと日別収支", CALORIE_GRAPH_GROUP,
+        GraphVisibilityButton("カロリー", "摂取・消費カロリーと日別収支", DashboardChartGroups.CALORIES,
             visibleGraphGroups, onToggleGraphGroup, Modifier.weight(1f))
-        GraphVisibilityButton("累積", "期間累積収支", CUMULATIVE_GRAPH_GROUP,
+        GraphVisibilityButton("累積", "期間累積収支", DashboardChartGroups.CUMULATIVE,
             visibleGraphGroups, onToggleGraphGroup, Modifier.weight(1f))
     }
 }

@@ -2,6 +2,8 @@ package io.github.puvon.enetrend
 
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,6 +25,35 @@ import org.junit.Test
 
 class DashboardScreenTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun graphVisibilityButtonsToggleIndependentlyPersistAndRestore() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val preferences = context.getSharedPreferences("graph_visibility", android.content.Context.MODE_PRIVATE)
+        preferences.edit().clear().commit()
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent { EnetrendTheme {
+            DashboardScreen(DashboardState.Loading, 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
+        } }
+        val weight = compose.onNodeWithContentDescription("体重と移動平均")
+        val calories = compose.onNodeWithContentDescription("摂取・消費カロリーと日別収支")
+        val cumulative = compose.onNodeWithContentDescription("期間累積収支")
+        weight.assertIsDisplayed().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "表示中"))
+        calories.assertIsDisplayed().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "表示中"))
+        cumulative.assertIsDisplayed().assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "表示中"))
+        compose.onNodeWithText("移動平均の計算期間").assertIsDisplayed()
+        compose.onNodeWithText("グラフの表示").assertIsDisplayed()
+        weight.performClick()
+        compose.runOnIdle { assertEquals(6, preferences.getInt("visible_groups", -1)) }
+        weight.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "非表示"))
+        calories.performClick()
+        compose.runOnIdle { assertEquals(4, preferences.getInt("visible_groups", -1)) }
+        restoration.emulateSavedInstanceStateRestore()
+        weight.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "非表示"))
+        calories.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "非表示"))
+        cumulative.assert(SemanticsMatcher.expectValue(androidx.compose.ui.semantics.SemanticsProperties.StateDescription, "表示中"))
+        cumulative.performClick()
+        compose.runOnIdle { assertEquals("all hidden is persisted distinctly", 0, preferences.getInt("visible_groups", -1)) }
+    }
 
     @Test fun allMissingBalancesPaintNoCumulativeOriginAndRefillRestoresIt() {
         val start = LocalDate.of(2026, 9, 1)

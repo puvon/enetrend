@@ -29,6 +29,54 @@ import org.junit.Test
 
 class ChartAppearanceTest {
     @get:Rule val compose = createComposeRule()
+    @Test fun allEightVisibilityCombinationsKeepAxesAndSelectionConsistent() {
+        var groups by mutableStateOf(DashboardChartGroups.ALL)
+        val projected = chart()
+        compose.setContent { EnetrendTheme {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                DashboardChart(projected, 1, {}, groups)
+            }
+        } }
+        for (mask in 0..DashboardChartGroups.ALL) {
+            compose.runOnIdle { groups = mask }
+            val graph = compose.onNodeWithContentDescription("統合グラフ。", substring = true).performScrollTo()
+            val description = graph.fetchSemanticsNode().config[SemanticsProperties.ContentDescription].joinToString()
+            compose.onNodeWithText("凡例を開く").assertExists()
+            assertEquals("weight group mask=$mask", mask and DashboardChartGroups.WEIGHT != 0,
+                description.contains("体重と移動平均"))
+            assertEquals("calorie group mask=$mask", mask and DashboardChartGroups.CALORIES != 0,
+                description.contains("摂取カロリー、消費カロリー、日別収支"))
+            assertEquals("cumulative group mask=$mask", mask and DashboardChartGroups.CUMULATIVE != 0,
+                description.contains("期間累積収支"))
+            if (mask and DashboardChartGroups.CALORIES != 0)
+                compose.onNodeWithText("摂取・消費 kcal").performScrollTo().assertIsDisplayed()
+            else compose.onNodeWithText("摂取・消費 kcal").assertDoesNotExist()
+            val rightAxis = when {
+                mask and DashboardChartGroups.WEIGHT == 0 -> "換算 kg（体重非表示）"
+                projected.baseline == null -> "換算 kg（体重なし）"
+                else -> "体重 kg"
+            }
+            if (mask and (DashboardChartGroups.WEIGHT or DashboardChartGroups.CUMULATIVE) != 0)
+                compose.onNodeWithText(rightAxis).performScrollTo().assertIsDisplayed()
+            else {
+                compose.onNodeWithText("体重 kg").assertDoesNotExist()
+                compose.onNodeWithText("換算 kg（体重なし）").assertDoesNotExist()
+                compose.onNodeWithText("換算 kg（体重非表示）").assertDoesNotExist()
+            }
+            if (mask == 0) {
+                assertTrue(description.contains("すべての系列は非表示です"))
+                assertTrue(description.contains("タップで日付を選択"))
+                compose.onNodeWithText("すべての系列は非表示です").assertDoesNotExist()
+                compose.onNodeWithText("体重 kg").assertDoesNotExist()
+                compose.onNodeWithText("摂取・消費 kcal").assertDoesNotExist()
+                val selectedDetails = graph.fetchSemanticsNode().config[SemanticsProperties.StateDescription]
+                assertTrue(selectedDetails.contains("2026-09-02"))
+                assertTrue(selectedDetails.contains("摂取：1700.0 kcal"))
+                assertTrue(selectedDetails.contains("日別収支：-300.0 kcal"))
+                assertTrue(selectedDetails.contains("期間累積収支：0.0 kcal"))
+            }
+        }
+    }
     @Test fun legendRestoresExpansionAndKeepsDateSelectionInBothThemes() {
         val restoration = StateRestorationTester(compose)
         var dark by mutableStateOf(false)
@@ -36,7 +84,7 @@ class ChartAppearanceTest {
         restoration.setContent {
             EnetrendTheme(darkTheme = dark) {
                 Column(Modifier.verticalScroll(rememberScrollState())) {
-                    DashboardChart(chart(), selected) { selected = it }
+                    DashboardChart(chart(), selected, { selected = it })
                 }
             }
         }

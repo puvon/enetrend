@@ -3,6 +3,13 @@ package io.github.puvon.enetrend.ui
 import io.github.puvon.enetrend.health.*
 import java.time.LocalDate
 
+internal object DashboardChartGroups {
+    const val WEIGHT = 1
+    const val CALORIES = 2
+    const val CUMULATIVE = 4
+    const val ALL = WEIGHT or CALORIES or CUMULATIVE
+}
+
 /** Coordinates are fractions of the plot: x increases rightwards, y downwards. */
 data class DashboardChartDay(
     val date: LocalDate,
