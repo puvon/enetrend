@@ -2,7 +2,7 @@ name: Build debug APK
 
 on:
   push:
-    branches: [master, 'feature/*']
+    branches: [master, 'feature/*', 'fix/*']
 
 permissions:
   contents: read
