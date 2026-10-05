@@ -44,12 +44,11 @@ internal fun DashboardChart(
     val showWeight = visibleGroups and DashboardChartGroups.WEIGHT != 0
     val showCalories = visibleGroups and DashboardChartGroups.CALORIES != 0
     val showCumulative = visibleGroups and DashboardChartGroups.CUMULATIVE != 0
-    val showRightAxis = showWeight || showCumulative
-    val showAnySeries = showWeight || showCalories || showCumulative
     val axisStyle = MaterialTheme.typography.labelSmall
     val textMeasurer = rememberTextMeasurer()
-    val leftLabels = if (showCalories) axisLabels(chart.dailyScale, decimals = 0) else emptyList()
-    val rightLabels = if (showRightAxis) axisLabels(chart.weightScale) else emptyList()
+    // Keep both axis columns allocated so toggling a group never changes the plot bounds.
+    val leftLabels = axisLabels(chart.dailyScale, decimals = 0)
+    val rightLabels = axisLabels(chart.weightScale)
     val density = LocalDensity.current
     fun axisWidth(labels: List<String>) = with(density) {
         labels.maxOfOrNull { textMeasurer.measure(it, axisStyle).size.width }?.toDp()?.plus(8.dp) ?: 0.dp
@@ -94,15 +93,15 @@ internal fun DashboardChart(
         } ?: Text("体重・移動平均なし：右軸は0中心の換算尺度です。体重の記録ではありません。", style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        if (showCalories) Text("摂取・消費 kcal", style = MaterialTheme.typography.labelSmall)
-        if (showRightAxis) Text(when {
+        Text("摂取・消費 kcal", style = MaterialTheme.typography.labelSmall)
+        Text(when {
             !showWeight -> "換算 kg（体重非表示）"
             chart.baseline != null -> "体重 kg"
             else -> "換算 kg（体重なし）"
         }, style = MaterialTheme.typography.labelSmall)
     }
     Row(Modifier.fillMaxWidth().height(240.dp)) {
-        if (showCalories) ChartAxis(leftLabels, Modifier.width(leftWidth))
+        ChartAxis(leftLabels, Modifier.width(leftWidth))
         Canvas(Modifier.weight(1f).fillMaxHeight().pointerInput(chart.range, chart.days.size, insetPx) {
             detectTapGestures { point ->
                 chartDayAt(point.x.toDouble(), size.width.toDouble(), insetPx.toDouble(), chart.days.size)?.let(selectDay)
@@ -132,15 +131,13 @@ internal fun DashboardChart(
             val dash = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 4.dp.toPx()))
             val dots = PathEffect.dashPathEffect(floatArrayOf(1.dp.toPx(), 3.dp.toPx()))
             clipRect(inset - 3.dp.toPx(), inset - 3.dp.toPx(), size.width - inset + 3.dp.toPx(), size.height - inset + 3.dp.toPx()) {
-                if (showAnySeries) {
-                    for (i in 0..4) drawLine(grid, Offset(x(0.0), y(i / 4.0)), Offset(x(1.0), y(i / 4.0)))
-                    if (showCalories) drawLine(dailyColor.copy(alpha = 0.6f), Offset(x(0.0), y(chart.dailyZeroY)),
-                        Offset(x(1.0), y(chart.dailyZeroY)))
-                    drawLine(grid, Offset(x(0.0), y(0.0)), Offset(x(0.0), y(1.0)))
-                    drawLine(grid, Offset(x(1.0), y(0.0)), Offset(x(1.0), y(1.0)))
-                    chart.days.getOrNull(selected)?.let {
-                        drawLine(grid, Offset(x(it.x), y(0.0)), Offset(x(it.x), y(1.0)), lineWidth)
-                    }
+                for (i in 0..4) drawLine(grid, Offset(x(0.0), y(i / 4.0)), Offset(x(1.0), y(i / 4.0)))
+                if (showCalories) drawLine(dailyColor.copy(alpha = 0.6f), Offset(x(0.0), y(chart.dailyZeroY)),
+                    Offset(x(1.0), y(chart.dailyZeroY)))
+                drawLine(grid, Offset(x(0.0), y(0.0)), Offset(x(0.0), y(1.0)))
+                drawLine(grid, Offset(x(1.0), y(0.0)), Offset(x(1.0), y(1.0)))
+                chart.days.getOrNull(selected)?.let {
+                    drawLine(grid, Offset(x(it.x), y(0.0)), Offset(x(it.x), y(1.0)), lineWidth)
                 }
                 val barWidth = (plotWidth / chart.days.size.coerceAtLeast(1) * ChartBalanceFill.DAY_WIDTH_FRACTION).toFloat()
                 if (showCalories) chart.days.forEach { day -> day.balanceFill?.let { fill ->
@@ -195,9 +192,9 @@ internal fun DashboardChart(
                 }
             }
         }
-        if (showRightAxis) ChartAxis(rightLabels, Modifier.width(rightWidth))
+        ChartAxis(rightLabels, Modifier.width(rightWidth))
     }
-    if (showAnySeries) Row(Modifier.fillMaxWidth().padding(start = leftWidth + plotInset, end = rightWidth + plotInset),
+    Row(Modifier.fillMaxWidth().padding(start = leftWidth + plotInset, end = rightWidth + plotInset),
         horizontalArrangement = Arrangement.SpaceBetween) {
             Text("${chart.range.startDate.monthValue}/${chart.range.startDate.dayOfMonth}", style = MaterialTheme.typography.labelSmall)
             val last = chart.range.endDateExclusive.minusDays(1)

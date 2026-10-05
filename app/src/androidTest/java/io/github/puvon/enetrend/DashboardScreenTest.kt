@@ -17,6 +17,7 @@ import io.github.puvon.enetrend.ui.DashboardScreen
 import io.github.puvon.enetrend.ui.theme.EnetrendTheme
 import io.github.puvon.enetrend.ui.theme.LocalBalanceColors
 import java.time.LocalDate
+import java.time.Instant
 import java.time.ZoneId
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -25,6 +26,30 @@ import org.junit.Test
 
 class DashboardScreenTest {
     @get:Rule val compose = createComposeRule()
+
+    @Test fun calorieToggleKeepsPlotBoundsAndRightAxisHeadingPosition() {
+        val start = LocalDate.of(2026, 9, 1)
+        val range = HealthDataRange(start, start.plusDays(7), ZoneId.of("Asia/Tokyo"))
+        val calories = DailyCalorieData(range, mapOf(start to CalorieTotals(1800.0, 2000.0)))
+        val measurements = (0L..6L).map { day ->
+            WeightMeasurement("$day", start.plusDays(day).atTime(8, 0).atZone(range.zoneId).toInstant(),
+                null, 70.0, "test", Instant.EPOCH)
+        }
+        val data = DashboardData(CalorieBalanceCalculator.calculate(calories),
+            WeightTrendCalculator.calculate(measurements, range), false)
+        compose.setContent { EnetrendTheme {
+            DashboardScreen(DashboardState.Ready(data), 7, MovingAveragePeriod.SEVEN_DAYS, {}, {}, {}, {}, {})
+        } }
+        val plot = compose.onNodeWithContentDescription("統合グラフ。", substring = true)
+        val heading = compose.onNodeWithText("体重 kg")
+        val initialPlotBounds = plot.fetchSemanticsNode().boundsInRoot
+        val initialHeadingBounds = heading.fetchSemanticsNode().boundsInRoot
+
+        compose.onNodeWithContentDescription("摂取・消費カロリーと日別収支").performClick()
+
+        assertEquals(initialPlotBounds, plot.fetchSemanticsNode().boundsInRoot)
+        assertEquals(initialHeadingBounds.left, heading.fetchSemanticsNode().boundsInRoot.left, 0.5f)
+    }
 
     @Test fun graphVisibilityButtonsToggleIndependentlyPersistAndRestore() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
