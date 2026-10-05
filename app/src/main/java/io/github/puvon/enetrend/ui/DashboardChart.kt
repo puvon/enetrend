@@ -85,7 +85,7 @@ internal fun DashboardChart(
         Text("白抜き・破線：補間／推定　点線：移動平均", style = MaterialTheme.typography.labelSmall)
         Text("期間累積の破線：補間由来の推定、または欠測日を除いた参考累積。詳細で区別します。", style = MaterialTheme.typography.labelSmall)
         Text("2点間の塗りが日別収支：＋は摂取超過（暖色）／−は消費超過（寒色）。0は塗りなし。", style = MaterialTheme.typography.labelSmall)
-        Text("左軸は0からの摂取・消費kcal。欠測は線を切り、当日の摂取未取得は点を描きません。当日の摂取0も表示しますが、収支・累積は前日までです。", style = MaterialTheme.typography.labelSmall)
+        Text("左軸は0からの摂取・消費kcal。欠測は線を切り、当日の摂取未取得または0 kcalは点を描きません。収支・累積は前日までです。", style = MaterialTheme.typography.labelSmall)
         Text("期間累積は期間開始を0とし、右軸の中央から描画します。1 kg幅＝${String.format(Locale.JAPAN, "%.0f", chart.kilocaloriesPerKilogram)} kcal幅。体重の予測値ではありません。", style = MaterialTheme.typography.labelSmall)
         if (!showWeight && showCumulative) Text("体重は非表示です。累積収支は体重を基準にした換算kg軸で表示します。", style = MaterialTheme.typography.labelSmall)
         chart.baseline?.let {

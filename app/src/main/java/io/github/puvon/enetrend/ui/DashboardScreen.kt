@@ -149,8 +149,7 @@ private fun DashboardContent(data: DashboardData, selectedDate: String?, onSelec
     data.today?.let { today ->
         Text(when {
             today.includesTodayBalance -> "今日まで表示しています。当日の摂取・消費は途中の値です。"
-            today.calories.intakeKilocalories == 0.0 -> "当日の摂取が0 kcalのため、当日の日別収支・期間累積収支は表示しません。摂取0と取得済み消費は途中の値として表示します。体重・移動平均は今日まで表示します。"
-            else -> "当日の摂取データが未取得のため、当日の摂取の点・日別収支・期間累積収支は表示しません。取得済み消費は途中の値として表示します。体重・移動平均は今日まで表示します。未記録・連携待ちの可能性があります。"
+            else -> "当日の摂取データが未取得または0 kcalのため、当日の摂取の点・日別収支・期間累積収支は表示しません。取得済み消費は途中の値として表示します。体重・移動平均は今日まで表示します。未記録・連携待ちの可能性があります。"
         })
     }
     if (data.historyLimited) Text("表示期間前のデータへのアクセスが制限されています。開始付近の平均・補間は利用できる記録だけに基づきます。")

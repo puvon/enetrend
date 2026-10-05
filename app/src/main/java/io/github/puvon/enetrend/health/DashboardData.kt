@@ -16,6 +16,9 @@ data class TodayStatus(
 ) {
     val includesTodayBalance: Boolean get() = calories.hasPositiveIntake
     val hasData: Boolean get() = calories.intakeKilocalories != null || calories.burnedKilocalories != null
+    /** A zero aggregate for today can mean no intake records, so present it as unavailable. */
+    val caloriesForDisplay: CalorieTotals get() = if (calories.intakeKilocalories == 0.0)
+        calories.copy(intakeKilocalories = null) else calories
     val calorieSummary: TodayCalorieSummary = TodayCalorieCalculator.calculate(this)
 }
 
@@ -71,6 +74,12 @@ class DashboardLoader(
             is HealthReadFailure -> return DashboardState.Failed(result)
         }
         val totals = todayCalories.recorded.getValue(today)
+        val todayDisplay = todayCalories.forDisplay().single().let { display ->
+            if (totals.intakeKilocalories == 0.0) display.copy(
+                recorded = display.recorded.copy(intakeKilocalories = null),
+                intake = DisplayValue.Missing,
+            ) else display
+        }
         val selected = HealthDataRange(today.minusDays(displayDays.toLong() - 1), today.plusDays(1), zone)
         val contextDays = maxOf(averagePeriod.days - 1, InterpolationPolicy().maxConsecutiveMissingDays + 1)
         val trendContext = HealthDataRange(selected.startDate.minusDays(contextDays.toLong()), selected.endDateExclusive, zone)
@@ -92,9 +101,10 @@ class DashboardLoader(
         val calculated = CalorieBalanceCalculator.calculate(trendCalories, selected.copy(endDateExclusive = balanceEnd))
         val balances = calculated.copy(
             range = selected,
-            // Keep actual intake/consumption in date details without calculating today's balance.
+            // Keep today's intake/consumption details without calculating today's balance;
+            // an aggregate zero intake is ambiguous and is presented as missing for today only.
             daily = calculated.daily + if (totals.hasPositiveIntake) emptyList() else
-                listOf(DailyCalorieBalance(todayCalories.forDisplay().single(), null)),
+                listOf(DailyCalorieBalance(todayDisplay, null)),
         )
         var weightHistoryLimited = false
         val firstWeights = repository.readWeights(trendContext)

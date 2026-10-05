@@ -182,7 +182,10 @@ class DashboardLoaderTest {
             assertEquals(intake, status.calories.intakeKilocalories)
             assertEquals(800.0, status.calories.burnedKilocalories)
             assertEquals(intake == 0.01, status.includesTodayBalance)
-            assertEquals(intake, data.balances.daily.last().source.recorded.intakeKilocalories)
+            assertEquals(if (intake == 0.0) null else intake,
+                data.balances.daily.last().source.recorded.intakeKilocalories)
+            assertEquals(if (intake == null || intake == 0.0) DisplayValue.Missing else DisplayValue.Recorded(intake),
+                data.balances.daily.last().source.intake)
             if (intake != 0.01) {
                 assertNull(data.balances.daily.last().kilocalories)
                 assertFalse(data.balances.periodCumulative.any { it.date == today })
@@ -217,10 +220,31 @@ class DashboardLoaderTest {
             assertNotNull(chart.days.last().weightY)
             assertNotNull(chart.days.last().movingAverageY)
             assertNotNull(chart.days.last().burnedY)
-            if (intake == null) assertNull(chart.days.last().intakeY)
+            if (intake == null || intake == 0.0) assertNull(chart.days.last().intakeY)
             else assertEquals(chart.dailyScale.y(intake), requireNotNull(chart.days.last().intakeY), 1e-9)
             assertEquals(1300.0, requireNotNull(data.today).calorieSummary.intakeAllowanceKilocalories!!, 1e-9)
         }
+    }
+
+    @Test fun zeroIntakeIsDisplayMissingTodayButRemainsZeroOnPriorDays() = runBlocking {
+        val source = Source().apply {
+            read = { if (it.startDate == today || it.startDate == today.minusDays(1))
+                CalorieTotals(0.0, 2000.0) else CalorieTotals(2100.0, 2000.0) }
+        }
+        val data = (DashboardLoader(HealthDataRepository(source)).load(today, zone, 7,
+            MovingAveragePeriod.SEVEN_DAYS) as DashboardState.Ready).data
+        val yesterday = requireNotNull(data.balances.daily.find { it.date == today.minusDays(1) })
+        val currentDay = requireNotNull(data.balances.daily.find { it.date == today })
+        assertEquals(DisplayValue.Recorded(0.0), yesterday.source.intake)
+        assertEquals(0.0, yesterday.source.recorded.intakeKilocalories!!, 0.0)
+        assertEquals(DisplayValue.Missing, currentDay.source.intake)
+        assertNull(currentDay.source.recorded.intakeKilocalories)
+        assertNull(currentDay.kilocalories)
+        assertNull(requireNotNull(data.today).caloriesForDisplay.intakeKilocalories)
+        assertEquals(0.0, requireNotNull(data.today).calories.intakeKilocalories!!, 0.0)
+        val chart = DashboardChartProjector.project(data)
+        assertEquals(chart.dailyScale.y(0.0), requireNotNull(chart.days[chart.days.lastIndex - 1].intakeY), 0.0)
+        assertNull(chart.days.last().intakeY)
     }
 
     @Test fun positiveTodaysIntakeWithMissingConsumptionKeepsTodayButNotAnInventedDailyBalance() = runBlocking {

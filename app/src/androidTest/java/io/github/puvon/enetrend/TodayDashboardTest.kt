@@ -73,7 +73,7 @@ class TodayDashboardTest {
         waitForPlot()
         assertTrue(selectedDate().startsWith(date.toString()))
         assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("期間累積収支：未算出"))
-        compose.onNodeWithText("当日の摂取データが未取得のため", substring = true).assertExists()
+        compose.onNodeWithText("当日の摂取データが未取得または0 kcalのため", substring = true).assertExists()
         compose.onNodeWithText("摂取可能量：1300.0 kcal").performScrollTo().assertIsDisplayed()
         val cardTop = compose.onNodeWithText("今日の状況（$date）").fetchSemanticsNode().positionInRoot.y
         assertTrue(cardTop < plot().fetchSemanticsNode().positionInRoot.y)
@@ -106,9 +106,11 @@ class TodayDashboardTest {
 
         source.current = CalorieTotals(0.0, 1600.0)
         retry()
-        compose.onNodeWithText("当日の摂取が0 kcalのため", substring = true).assertExists()
-        compose.onNodeWithText("取得済み摂取：0.0 kcal").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("取得済み摂取：未取得").assertDoesNotExist()
+        compose.onNodeWithText("当日の摂取データが未取得または0 kcalのため", substring = true).assertExists()
+        compose.onNodeWithText("取得済み摂取：未取得").performScrollTo().assertIsDisplayed()
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("摂取：欠測"))
+        assertTrue(plot().fetchSemanticsNode().config[SemanticsProperties.StateDescription].contains("消費：1600.0 kcal"))
+        compose.onNodeWithText("取得済み摂取：0.0 kcal").assertDoesNotExist()
     }
 
     @Test fun intakeRefreshKeepsFirstDayAndPeriodAverageAndSelectionDoNotChangeAllowance() {
@@ -151,7 +153,7 @@ class TodayDashboardTest {
         }
     }
 
-    @Test fun todaysConsumptionAndZeroIntakeAppearWithoutInventedBalances() {
+    @Test fun todaysConsumptionAppearsButZeroIntakeIsMissingWithoutInventedBalances() {
         val source = Source(date).apply { history = CalorieTotals(null, null) }
         route(source)
         waitForPlot()
@@ -159,7 +161,7 @@ class TodayDashboardTest {
             source.current = CalorieTotals(intake, 1600.0)
             retry()
             val description = plot().performScrollTo().fetchSemanticsNode().config[SemanticsProperties.StateDescription]
-            assertTrue(description.contains("摂取：${if (intake == null) "欠測" else "${intake} kcal"}"))
+            assertTrue(description.contains("摂取：${if (intake == null || intake == 0.0) "欠測" else "${intake} kcal"}"))
             assertTrue(description.contains("消費：1600.0 kcal"))
             assertTrue(description.contains("日別収支：${if (intake == 1800.0) "200.0 kcal" else "未算出"}"))
             if (intake != 1800.0) assertTrue(description.contains("期間累積収支：未算出"))
@@ -186,7 +188,7 @@ class TodayDashboardTest {
         compose.onNodeWithText("取得済み消費：未取得").assertExists()
         compose.runOnIdle { current = CalorieTotals(0.0, 0.0) }
         compose.onNodeWithText("摂取可能量：0.0 kcal").performScrollTo().assertIsDisplayed()
-        compose.onNodeWithText("取得済み摂取：0.0 kcal").assertExists()
+        compose.onNodeWithText("取得済み摂取：未取得").assertExists()
     }
 
     @Test fun negativeAllowanceAndRecordedConsumptionOverrideRemainExplicit() {

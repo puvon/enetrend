@@ -47,7 +47,7 @@ internal fun TodayCard(status: TodayStatus) {
             Text(basis, style = MaterialTheme.typography.bodySmall)
             Text("取得済み消費：${status.calories.burnedKilocalories.formatted("kcal", "未取得")}")
             Text("予測消費：${summary.predictedBurnedKilocalories.formatted("kcal", "算出不可")}")
-            Text("取得済み摂取：${status.calories.intakeKilocalories.formatted("kcal", "未取得")}")
+            Text("取得済み摂取：${status.caloriesForDisplay.intakeKilocalories.formatted("kcal", "未取得")}")
             Text("過去7日収支：${summary.previousBalanceKilocalories.formatted("kcal", "算出不可")}")
             if (summary.previousBalanceKilocalories == null) Text("過去収支の補正なし", style = MaterialTheme.typography.bodySmall)
             Text("${status.date.minusDays(7)} ～ ${status.date.minusDays(1)}", style = MaterialTheme.typography.bodySmall)
